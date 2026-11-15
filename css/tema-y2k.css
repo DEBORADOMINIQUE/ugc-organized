@@ -1,0 +1,296 @@
+/* =========================================================
+   tema-y2k.css · UGC Organized
+   Estética garota anos 2000: tudo rosa, brilho de gel e glitter.
+   Carregado por ÚLTIMO: sobrescreve as cores do painel.
+   (Os nomes das variáveis vêm da versão antiga; só os valores mudaram.)
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
+
+:root, :root:not([data-theme]) {
+  --vinho: #e0157a;          /* rosa choque: botões, destaques */
+  --vinho-escuro: #a80d5a;   /* rosa profundo: hover */
+  --vinho-claro: #ffe0ef;    /* rosa bebê: selos */
+  --creme: #ffe4f1;
+  --creme-claro: #fff5fa;    /* fundo */
+  --dourado: #ff4fa3;        /* chiclete: estrelas, brilhos */
+  --dourado-claro: #fff1c4;  /* amarelo manteiga: alertas */
+  --branco: #ffffff;
+  --grafite: #3d0f2b;        /* texto: ameixa */
+  --suave: #8a4a6e;
+  --borda: #ffc6e2;
+  --verde: #1f8a5b;
+  --vermelho: #d62839;
+  --titulo: 'Fredoka', 'Nunito', system-ui, sans-serif;
+  --texto: 'Nunito', system-ui, -apple-system, sans-serif;
+  --gel: linear-gradient(180deg, #ff7cbf 0%, #ff2d95 55%, #e0157a 100%);
+  --gel-sombra: inset 0 1px 0 rgba(255,255,255,.65), inset 0 -2px 6px rgba(168,13,90,.25), 0 8px 18px -8px rgba(224,21,122,.65);
+  --sombra: 0 1px 2px rgba(224,21,122,.06), 0 12px 30px -14px rgba(224,21,122,.35);
+}
+
+/* Fundo de bolinhas */
+body {
+  background-color: var(--creme-claro);
+  background-image: radial-gradient(rgba(255,79,163,.16) 1.4px, transparent 1.6px);
+  background-size: 20px 20px;
+}
+
+/* Logo com a bolinha rosa choque */
+.logo { font-family: var(--titulo); font-weight: 700; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.logo .bolinha { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; background: radial-gradient(circle at 35% 30%, #ff9fd0, #ff1493 55%, #c20f6c); box-shadow: 0 0 10px rgba(255,20,147,.6); }
+.logo b { color: var(--dourado); font-weight: 700; }
+.logo .brilho { font-size: .7em; color: #fff; opacity: .9; }
+
+/* Títulos em gel */
+.topo h1, .cartao h2, .coluna h3, h1 { font-weight: 600; letter-spacing: -.01em; }
+.saudacao { font-family: var(--titulo); font-style: normal; color: var(--vinho); font-weight: 500; }
+.saudacao::after { content: ' ✦'; color: var(--dourado); }
+
+/* Sidebar rosa com brilho */
+.sidebar {
+  background: linear-gradient(170deg, #ff5fae 0%, #ff2d95 45%, #c8106a 100%);
+  color: #fff;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.35), 6px 0 30px -12px rgba(224,21,122,.5);
+}
+.sidebar::before { content: '✦  ✧  ✦'; position: absolute; bottom: 150px; left: 24px; color: rgba(255,255,255,.35); letter-spacing: 6px; font-size: .9rem; pointer-events: none; }
+.sidebar .logo { color: #fff; text-shadow: 0 2px 10px rgba(168,13,90,.35); }
+.sidebar .logo b { color: #fff3a8; }
+.menu-rotulo, .usuario-rotulo { color: rgba(255,255,255,.75); }
+.aba { color: rgba(255,255,255,.88); font-weight: 600; border-radius: 999px; }
+.aba:hover { background: rgba(255,255,255,.16); color: #fff; }
+.aba.ativa { background: rgba(255,255,255,.95); color: var(--vinho); box-shadow: 0 6px 16px -6px rgba(120,0,60,.5), inset 0 -2px 0 rgba(255,79,163,.25); }
+.usuario-email { color: #fff; }
+.sidebar-rodape { border-top-color: rgba(255,255,255,.3); }
+.sair { border-color: rgba(255,255,255,.7); color: #fff; border-radius: 999px; }
+.sair:hover { background: rgba(255,255,255,.18); }
+.selo-aba { background: #fff3a8; color: var(--vinho-escuro); box-shadow: 0 0 0 2px rgba(255,255,255,.6); }
+
+/* Botões de gel */
+.btn-primario, .botao, .periodo.ativo, .vis-btn.ativo, .numero.destaque, .btn.principal {
+  background: var(--gel) !important; color: #fff !important; border: 0; box-shadow: var(--gel-sombra);
+  text-shadow: 0 1px 1px rgba(168,13,90,.35);
+}
+.btn-primario, .botao, .btn.principal { border-radius: 999px; }
+.btn-primario:hover, .botao:hover, .btn.principal:hover { filter: brightness(1.06) saturate(1.05); transform: translateY(-1px); }
+.btn-secundario, .periodos, .visoes, .busca, .btn-menu { border-color: var(--borda); border-radius: 999px; }
+
+/* Cartões fofos */
+.cartao { border-color: var(--borda); border-radius: 26px; }
+.numero.destaque .rotulo, .numero.destaque .extra { color: #fff; opacity: .92; }
+.numero .valor { font-family: var(--titulo); font-weight: 600; color: var(--vinho); }
+.numero.destaque .valor { color: #fff; }
+.contato-destaque { background: linear-gradient(120deg, #fff, #ffe0ef 60%, #fff1c4); }
+
+/* Barras e gráficos em rosa */
+.barra { background: var(--gel); }
+.barra-col:hover .barra, .barra-col:focus .barra { background: linear-gradient(180deg, #fff1c4, #ffb3d9); }
+.preenchido { background: linear-gradient(90deg, #ff2d95, #ff8fc7); }
+.preenchido.ouro { background: linear-gradient(90deg, #c77dff, #ff8fc7); }
+.trilho { background: #ffe4f1; }
+.dica { background: var(--vinho-escuro); }
+
+/* Funil e marcas */
+.coluna { background: rgba(255,228,241,.6); border-radius: 26px; }
+.coluna.sobre { background: #fff1c4; border-color: var(--dourado); }
+.coluna.producao { background: rgba(255,208,232,.6); }
+.card-marca { border-radius: 18px; }
+.card-marca:hover { box-shadow: 0 10px 24px -12px rgba(224,21,122,.5); }
+.avancar:hover { background: var(--gel); }
+.estrela.on, .estrelas { color: var(--dourado); text-shadow: 0 0 6px rgba(255,79,163,.4); }
+.legenda .pagamento::before, .ev.pagamento { background: #c77dff; }
+.dia.hoje { outline-color: var(--dourado); }
+.ficha-cab small { color: var(--dourado); }
+.dialogo-ficha { border-radius: 28px; }
+.dialogo-ficha::backdrop { background: rgba(120,0,60,.35); backdrop-filter: blur(3px); }
+
+/* Login */
+.cartao-login, main.cartao { border-top-color: var(--vinho); }
+input:focus, .campo input:focus, .campo select:focus, .campo textarea:focus { border-color: var(--dourado) !important; box-shadow: 0 0 0 3px rgba(255,79,163,.18) !important; }
+.check input, .escolha input { accent-color: var(--vinho); }
+
+/* Seleção de texto rosinha */
+::selection { background: #ffb3d9; color: var(--grafite); }
+
+/* Glitter do mouse */
+.glitter {
+  position: fixed; pointer-events: none; z-index: 9999; line-height: 1; user-select: none;
+  animation: glitter-cai .9s ease-out forwards; will-change: transform, opacity;
+}
+@keyframes glitter-cai {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.2) rotate(var(--giro)); }
+}
+
+/* =========================================================
+   MODO ESCURO · rosa neon na noite (liga pelo botão da barra lateral)
+   ========================================================= */
+:root[data-theme="dark"] {
+  --vinho: #ff4fa3;
+  --vinho-escuro: #ff7cbf;
+  --vinho-claro: #3a1430;
+  --creme: #2c1024;
+  --creme-claro: #170910;
+  --dourado: #ff8fc7;
+  --dourado-claro: #3b2a12;
+  --branco: #221019;
+  --grafite: #ffe4f1;
+  --suave: #d9a3c2;
+  --borda: #4d2140;
+  --verde: #5fd59a;
+  --vermelho: #ff6b7d;
+  --sombra: 0 1px 2px rgba(0,0,0,.4), 0 14px 30px -14px rgba(255,20,147,.25);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] body { background-color: var(--creme-claro); background-image: radial-gradient(rgba(255,79,163,.12) 1.4px, transparent 1.6px); }
+:root[data-theme="dark"] .sidebar { background: linear-gradient(170deg, #3d0b2a 0%, #2a0820 50%, #16040f 100%); box-shadow: inset -1px 0 0 rgba(255,79,163,.35), 6px 0 30px -12px rgba(255,20,147,.35); }
+:root[data-theme="dark"] .aba.ativa { background: var(--gel); color: #fff; }
+:root[data-theme="dark"] .sidebar .logo b { color: #ff8fc7; }
+/* Tudo que era branco fixo vira "cartão escuro" */
+:root[data-theme="dark"] :is(.cartao, .tarefa, .p-item, .f-item, .s-item, .card-marca, .t-chip, .check, .passo, .s-opcao, .lead, .dia-sem, .hoje-item, .busca, .periodos, .visoes, .filtros button, .p-status, .dias-escolha span, .cat-escolha span, .dur-escolha button, .sug, .btn-menu, .cal-nav, .plano-passos > div, .t-check, .coluna .qtd, .p-dia h3 span, .stepper button:first-child, .contato-destaque, .plano-meta, .feedback-resumo) { background-color: var(--branco); background-image: none; color: var(--grafite); border-color: var(--borda); }
+:root[data-theme="dark"] :is(input, select, textarea, .campo input, .campo select, .campo textarea, .p-linha input, .p-linha select, .passo input) { background: #1c0b15 !important; color: var(--grafite) !important; border-color: var(--borda) !important; }
+:root[data-theme="dark"] :is(.coluna, .dia, .s-resumo, .texto-stats, .previa-prazo, .mensagem, .texto-usado p, .ficha-rodape) { background: var(--creme); color: var(--grafite); }
+:root[data-theme="dark"] .dialogo-ficha { background: var(--branco); }
+:root[data-theme="dark"] :is(.chip, .mini-btn, .valor-tag) { background: #3a1430; color: #ffb3d9; }
+:root[data-theme="dark"] :is(.mini-btn.zap, .chip.ok, .valor-tag.pago, .prazo, .previa-prazo.ok, .mini-btn.nf.emitida, .selo-fb.sim) { background: #10301f; color: #7ee2ad; }
+:root[data-theme="dark"] :is(.prazo.alerta, .tag-data.alerta, .previa-prazo.alerta, .atrasadas, .aviso-nf, .mini-btn.nf, .p-status.alerta, .mini-btn.agenda) { background: #3b2a12; color: #ffd28a; }
+:root[data-theme="dark"] :is(.prazo.atraso, .previa-prazo.atraso, .faixa-erro, .aviso-erro, .p-status.atraso, .hoje-item.atraso, .f-item.atrasado) { background: #3a0f18; color: #ff9aa8; }
+:root[data-theme="dark"] :is(.aprendendo, .ativar-lembrete, .chip.texto, .chip.marca) { background: #2a1640; color: #d9b8ff; }
+:root[data-theme="dark"] .p-item.aprovada { background: #10261b; }
+:root[data-theme="dark"] .tag-data, :root[data-theme="dark"] .prazo.neutro { background: var(--creme); color: var(--suave); }
+:root[data-theme="dark"] .dia.hoje { background: var(--branco); }
+:root[data-theme="dark"] .trilho, :root[data-theme="dark"] .carga { background: #3a1430; }
+:root[data-theme="dark"] .numero.destaque, :root[data-theme="dark"] :is(.btn-primario, .vis-btn.ativo, .periodo.ativo) { background: var(--gel) !important; color: #fff !important; }
+:root[data-theme="dark"] .dia-sem.folga { background: repeating-linear-gradient(-45deg, #2c1024 0 8px, #221019 8px 16px); }
+.tema-btn { width: 100%; margin-bottom: 8px; padding: 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.45); background: rgba(255,255,255,.12); color: #fff; font-weight: 700; font-size: .85rem; }
+.tema-btn:hover { background: rgba(255,255,255,.22); }
+:root[data-theme="dark"] .selo-aba { color: #5a0a33; }
+
+/* =========================================================
+   IDENTIDADE LIMA + ROSA (igual ao ícone do app)
+   Rosa choque continua como cor principal; o lima entra como
+   destaque: marca, selos, progresso, foco e detalhes.
+   ========================================================= */
+:root {
+  --lima: #c6f05a;
+  --lima-claro: #effbd2;
+  --lima-forte: #a8de2e;
+  --lima-texto: #4f7a00;   /* lima escuro para texto legível */
+  --lima-gel: linear-gradient(180deg, #e2ff8a 0%, #c6f05a 55%, #a8de2e 100%);
+}
+body {
+  background-color: #fff8fb;
+  background-image: radial-gradient(rgba(168,222,46,.22) 1.4px, transparent 1.6px);
+}
+
+/* Marca: quadradinho lima com a bolinha rosa, como o ícone */
+.logo .bolinha { position: relative; width: 26px; height: 26px; border-radius: 8px; background: var(--lima-gel); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 4px 10px -3px rgba(80,120,0,.45); }
+.logo .bolinha::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: radial-gradient(circle at 36% 30%, #ffc2e2, #ff2d9b 40%, #e0127a 80%, #b00a5e); box-shadow: 0 2px 4px rgba(176,10,94,.35); }
+.logo b, .sidebar .logo b { color: var(--lima); text-shadow: 0 1px 0 rgba(0,0,0,.08); }
+main.cartao .logo b, .cartao .logo b { color: var(--lima-texto); }
+
+/* Barra lateral: rosa elegante, detalhes em lima */
+.sidebar { background: linear-gradient(175deg, #ff4fa8 0%, #ec1c86 50%, #c40f6a 100%); }
+.menu-grupo { color: rgba(239,251,210,.85); }
+.aba.ativa { box-shadow: inset 4px 0 0 var(--lima), 0 6px 16px -6px rgba(120,0,60,.5); }
+.selo-aba { background: var(--lima); color: #2f4a00; box-shadow: 0 0 0 2px rgba(255,255,255,.55); }
+.tema-btn { border-color: rgba(239,251,210,.6); }
+
+/* Detalhes em lima pelo app */
+.saudacao::after { color: var(--lima-forte); }
+.ficha-cab small, .menu-rotulo { color: var(--lima-texto); }
+.cartao { border-color: #f6cfe3; }
+.numero.destaque .extra { color: var(--lima-claro); opacity: 1; }
+.carga.ok > div, .meta-dia .carga.ok > div, .preenchido.ouro { background: linear-gradient(90deg, var(--lima-forte), var(--lima)); }
+.chip.ok, .valor-tag.pago, .mini-btn.zap { background: var(--lima-claro); color: var(--lima-texto); }
+.prazo, .previa-prazo.ok { background: var(--lima-claro); color: var(--lima-texto); }
+.p-item.aprovada { border-left-color: var(--lima-forte); background: #f8fde9; }
+.coluna.sobre { background: var(--lima-claro); border-color: var(--lima-forte); }
+.dia.hoje { outline-color: var(--lima-forte); }
+.legenda .feito::before, .ev.feito { background: var(--lima-forte); }
+.ev.feito { color: #2f4a00; }
+.t-check { border-color: var(--lima-forte); }
+.cronometro::before { color: var(--lima-forte); }
+.aprendendo { background: var(--lima-claro); color: var(--lima-texto); }
+.crescimento.ok { border-color: var(--lima); background: linear-gradient(135deg, #fff, var(--lima-claro)); }
+input:focus, .campo input:focus, .campo select:focus, .campo textarea:focus { border-color: var(--lima-forte) !important; box-shadow: 0 0 0 3px rgba(168,222,46,.28) !important; }
+::selection { background: var(--lima); color: #1f2e00; }
+.assistente-fab { box-shadow: var(--gel-sombra), 0 0 0 3px var(--lima), 0 14px 30px -10px rgba(224,21,122,.6); }
+main.cartao { border-top: 1px solid #f6cfe3; background: linear-gradient(90deg, #ff2d9b, var(--lima)) top / 100% 6px no-repeat, var(--branco); }
+.contato-destaque { background: linear-gradient(120deg, #fff, #ffe0ef 55%, var(--lima-claro)); }
+.plano-meta { background: linear-gradient(135deg, #fff 0%, #ffe8f4 55%, var(--lima-claro) 100%); }
+
+/* Modo escuro: lima neon */
+:root[data-theme="dark"] { --lima-claro: #24330a; --lima-texto: #d4ff7a; }
+:root[data-theme="dark"] body { background-image: radial-gradient(rgba(198,240,90,.10) 1.4px, transparent 1.6px); }
+:root[data-theme="dark"] :is(.chip.ok, .valor-tag.pago, .mini-btn.zap, .prazo, .previa-prazo.ok, .aprendendo) { background: #24330a; color: #d4ff7a; }
+:root[data-theme="dark"] .selo-aba { background: var(--lima); color: #1f2e00; }
+:root[data-theme="dark"] .crescimento.ok { background: #1a260a; }
+
+/* =========================================================
+   REGRAS DE DESIGN · cores com papel e hierarquia tipográfica
+   Rosa  = ação (botões, aba ativa, links)
+   Lima  = conquista e marca (progresso, metas, selos, logo)
+   Lilás = informação (marcas ligadas, lembretes, licenças)
+   Ameixa = tinta (títulos e números)
+   Escala: 1.85 / 1.15 / 1.0 / .95 / .86 / .72 rem
+   ========================================================= */
+:root {
+  --ameixa: #2e0b22;
+  --ameixa-suave: #6e3a5a;
+  --lilas: #9b6bf2;
+  --lilas-claro: #f1eaff;
+  --lilas-texto: #5b2fb0;
+  --suave: #7d5470;
+}
+:root[data-theme="dark"] { --ameixa: #ffe9f4; --ameixa-suave: #e3bcd3; --lilas-claro: #2a1a45; --lilas-texto: #d4bfff; }
+
+/* 1. Título da página */
+.topo h1 { font-family: var(--titulo); font-weight: 600; font-size: 1.85rem; letter-spacing: -.02em; color: var(--ameixa); }
+/* 2. Saudação: voz calma, abaixo do título */
+.saudacao, .marcas-barra .saudacao { font-family: var(--texto); font-weight: 600; font-size: 1rem; color: var(--ameixa-suave); }
+/* 3. Título de cartão e de seção */
+.cartao h2, .ficha-cab h2, .ficha legend, .cal-cab h2, .f-mes h2 { font-family: var(--titulo); font-weight: 600; color: var(--ameixa); letter-spacing: -.01em; }
+.cartao h2 { font-size: 1.15rem; }
+.coluna h3, .p-dia h3, .cr-colunas h3, .dia-sem header strong, .hoje-cab h2 { color: var(--ameixa); font-weight: 600; }
+/* 4. Rótulo: pequeno, caixa-alta, discreto */
+.numero .rotulo, .ritmo-rotulo, .s-total .rotulo, .feedback-resumo .rotulo { font-family: var(--texto); font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--suave); }
+.numero.destaque .rotulo { color: rgba(255,255,255,.85); }
+/* 5. Números: tinta ameixa; o rosa fica para o cartão de destaque */
+.numero .valor, .ritmo-num, .meta-num, .s-ref, .contato-destaque .valor, .plano-passos b, .texto-stats b, .feedback-resumo .valor { color: var(--ameixa); font-family: var(--titulo); font-weight: 600; letter-spacing: -.02em; }
+.numero.destaque .valor { color: #fff; }
+.numero .valor.menor { font-size: 1.5rem; }
+.ritmo-num small, .meta-num small { color: var(--suave); font-family: var(--texto); }
+/* 6. Texto e notas */
+body { color: var(--ameixa); }
+.desc, .cartao .desc, small.desc { color: var(--suave); font-size: .86rem; line-height: 1.5; }
+.t-titulo, .p-nome, .card-topo strong, .f-corpo strong, .s-item strong { color: var(--ameixa); }
+.t-hora { color: var(--ameixa-suave); }
+.f-valor, .valor-tag { font-family: var(--titulo); }
+.f-valor { color: var(--ameixa); }
+.f-valor.ok { color: var(--lima-texto); }
+.f-valor.gasto { color: var(--lilas-texto); }
+
+/* Rosa = ação: links e textos clicáveis */
+.link, .link-precos, .cr-detalhes summary, .abrir, .add-coluna, .add-dia { color: var(--vinho); }
+
+/* Lilás = informação */
+.chip.marca, .chip.texto { background: var(--lilas-claro); color: var(--lilas-texto); }
+.ativar-lembrete { background: var(--lilas-claro); color: var(--lilas-texto); }
+.legenda .pagamento::before, .ev.pagamento, .legenda .licenca::before, .ev.licenca { background: var(--lilas); }
+.legenda .gasto::before, .f-b.gasto { background: var(--lilas); }
+.ev.followup { background: #ffd1e8; color: var(--ameixa); }
+.preenchido.ouro { background: linear-gradient(90deg, var(--lilas), #c7a6ff); }
+
+/* Ritmo visual: espaços e bordas consistentes */
+.cartao { box-shadow: 0 1px 2px rgba(46,11,34,.04), 0 12px 28px -16px rgba(224,21,122,.28); }
+.numeros { gap: 14px; }
+.vis-btn, .periodo { font-weight: 700; }
+
+/* Harmonia final */
+.cr-medidor { background: linear-gradient(90deg, #ffc2d6 0%, #d9c2ff 50%, var(--lima) 100%); }
+.cr-medidor div { border-color: var(--ameixa); }
+.meta-info strong { color: var(--ameixa); }
+.meta-dia .carga > div { background: linear-gradient(90deg, var(--lima-forte), var(--lima)); }
+.plano-frase b, .cr-colunas li b, .item-barra .cabeca strong { color: var(--ameixa); font-weight: 800; }
+.plano-passos > span { color: var(--lima-forte); }
+:root[data-theme="dark"] .sidebar .logo b { color: var(--lima); }
+:root[data-theme="dark"] .meta-dia .carga > div { background: linear-gradient(90deg, #8fc21c, var(--lima)); }
