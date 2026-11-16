@@ -38,6 +38,7 @@
   <script src="js/comparativo.js?v=2"></script>
   <script src="js/perfil.js?v=3"></script>
   <script src="js/conta.js?v=1"></script>
+  <script src="js/assinatura.js?v=1"></script>
   <script src="js/feriados.js?v=1"></script>
   <script src="js/sugestoes.js?v=1"></script>
   <script src="js/agenda.js?v=7"></script>
@@ -254,7 +255,7 @@
     }
   </style>
   <link rel="stylesheet" href="css/tema-y2k.css?v=6">
-  <link rel="stylesheet" href="css/perfil.css?v=8">
+  <link rel="stylesheet" href="css/perfil.css?v=9">
   <link rel="stylesheet" href="css/agenda.css?v=6">
   <script src="js/glitter.js?v=4" defer></script>
 </head>
@@ -428,6 +429,11 @@
 
     // A parte do portfólio (visitas e mensagens do site) é só da conta dona do site.
     // Clientes não veem a aba Portfólio nem os números do site.
+    // ===== Acesso: só quem tem assinatura ativa (Kiwify) usa o app =====
+    let acesso = null;
+    try { const r = await sb.rpc('tem_acesso'); if (r.error) throw r.error; acesso = r.data === true; } catch (e) { console.error(e); }
+    if (acesso !== true) { Assinatura.bloquear(auth.email, acesso === null); return; }
+
     let temSite = false;
     try { const { data: pf } = await sb.from('preferencias').select('dados').maybeSingle(); temSite = !!(pf && pf.dados && pf.dados.site_portfolio); } catch (e) {}
     // Segunda checagem: se a conta enxerga as visitas do site, ela é a dona (o banco só mostra para a dona)

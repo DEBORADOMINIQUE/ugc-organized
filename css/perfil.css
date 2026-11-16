@@ -109,3 +109,24 @@ body { line-height: 1.6; letter-spacing: .005em; -webkit-font-smoothing: antiali
 .aut-qr img { width: 200px; height: 200px; }
 .campo-codigo { text-align: center; font-size: 1.4rem !important; letter-spacing: .35em; font-weight: 700; }
 code { background: var(--creme); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+/* Tela de assinatura */
+.paywall { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.pw-cartao { width: 100%; max-width: 520px; background: var(--branco); border: 1px solid #f6cfe3; border-radius: 28px; padding: 32px 28px; box-shadow: var(--sombra); text-align: center; }
+.pw-cartao .logo { justify-content: center; margin-bottom: 18px; font-size: 1.4rem; }
+.pw-cartao h1 { font-family: var(--titulo); font-size: 1.7rem; color: var(--ameixa); margin-bottom: 8px; }
+.pw-sub { color: var(--suave); margin-bottom: 20px; }
+.pw-planos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.pw-plano { display: flex; flex-direction: column; gap: 2px; padding: 18px 12px; border-radius: 20px; border: 2px solid var(--borda); text-decoration: none; color: var(--ameixa); }
+.pw-plano span { font-weight: 800; color: var(--suave); text-transform: uppercase; font-size: .8rem; letter-spacing: .06em; }
+.pw-plano b { font-family: var(--titulo); font-size: 1.8rem; }
+.pw-plano small { color: var(--suave); }
+.pw-plano.destaque { background: var(--gel); color: #fff; border-color: transparent; box-shadow: var(--gel-sombra); }
+.pw-plano.destaque span, .pw-plano.destaque small { color: rgba(255,255,255,.9); }
+.pw-plano.em-breve { opacity: .55; cursor: default; }
+.pw-dica { font-size: .9rem; background: var(--lima-claro); color: var(--lima-texto); border-radius: 14px; padding: 10px 12px; margin-bottom: 14px; }
+.pw-acoes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pw-sec, .pw-btn { border: 1px solid var(--borda); background: var(--branco); color: var(--ameixa); border-radius: 999px; padding: 10px 16px; font-weight: 700; }
+.pw-btn { background: var(--gel); color: #fff; border: 0; }
+.pw-ajuda { margin-top: 18px; font-size: .88rem; color: var(--suave); }
+.pw-ajuda a { color: var(--vinho); font-weight: 700; }
+.pw-cartao .logo { color: var(--ameixa); } .pw-cartao .logo b { color: var(--vinho); }
