@@ -240,7 +240,7 @@
       <div class="lem-quando">⏰ ${quando} · ${hora5(t.hora)}${t.data !== hoje() ? ' de ' + nomeDia(t.data).toLowerCase() : ''}</div>
       <div class="lem-titulo">${c.emoji} ${esc(t.titulo)}</div>
       <div class="lem-meta">${c.nome} · ${durTxt(t.duracao_min)}${t.notas ? ' · ' + esc(t.notas.slice(0, 80)) : ''}</div>
-      <div class="lem-acoes"><button class="crono-btn fim" data-lem="feito">✓ Concluído</button><button class="crono-btn" data-lem="indo">▶ Indo fazer</button><button class="crono-btn" data-lem="cancelar">✕ Cancelar hoje</button></div>`;
+      <div class="lem-acoes"><button class="crono-btn fim" data-lem="feito">✓ Concluído</button><button class="crono-btn" data-lem="indo">▶ Executando</button><button class="crono-btn" data-lem="cancelar">✕ Cancelar hoje</button></div>`;
     box.appendChild(card);
   }
 
@@ -360,7 +360,7 @@
       ${t._rep && !t.concluida && t.data === hoje() ? (t._estado === 'fazendo'
         ? `<div class="crono-grupo"><span class="chip fazendo">▶ Fazendo agora</span>
             <button class="crono-btn fim" data-dia-estado="feita" data-id="${t.id}" data-dia="${t.data}">✓ Concluído</button></div>`
-        : `<div class="crono-grupo"><button class="crono-btn" data-dia-estado="fazendo" data-id="${t.id}" data-dia="${t.data}">▶ Indo fazer</button>
+        : `<div class="crono-grupo"><button class="crono-btn" data-dia-estado="fazendo" data-id="${t.id}" data-dia="${t.data}">▶ Executando</button>
             <button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Só hoje. Os outros dias continuam.">✕ Cancelar hoje</button></div>`) : ''}
       ${!t._rep && !t.concluida && t.data === hoje() && !t.iniciada_em && !acumulado(t) ? `<button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Tirar de hoje">✕ Hoje não</button>` : ''}
       ${!t._rep && !t.concluida && t.data === hoje() ? (t.iniciada_em
