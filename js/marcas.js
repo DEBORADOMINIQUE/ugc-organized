@@ -318,7 +318,7 @@
     return `<article class="card-marca" draggable="true" data-id="${m.id}" tabindex="0">
       <div class="card-topo">
         <strong>${esc(m.nome)}</strong>
-        ${m.valor ? `<span class="valor-tag ${m.pago ? 'pago' : ''}" title="${m.pago ? 'Recebido' : 'A receber'}">${moeda(m.valor)}</span>` : ''}
+        ${(m.acordo || []).some(x => x.permuta) ? `<span class="valor-tag permuta" title="Permuta">🎁 Permuta</span>` : m.valor ? `<span class="valor-tag ${m.pago ? 'pago' : ''}" title="${m.pago ? 'Recebido' : 'A receber'}">${moeda(m.valor)}</span>` : ''}
       </div>
       ${m.entregaveis ? `<p class="entregaveis">${esc(m.entregaveis)}</p>` : ''}
       ${st && !['concluida', 'perdida'].includes(m.etapa) ? `<div class="prazo ${st.cor}">${esc(st.txt)}${!m.data_entregue ? ` <span>· ${fmtCurta(m.data_entrega)}</span>` : ''}</div>` : ''}
@@ -469,15 +469,25 @@
         </fieldset>
 
         <fieldset id="sec-acordo"><legend>O que foi acordado com a marca</legend>
+          ${(() => { const pm = (m.acordo || []).find(x => x.permuta) || {}; return `
+          <div class="dias-escolha forma-pag">
+            <label><input type="radio" name="forma_pag" value="dinheiro" ${pm.permuta ? '' : 'checked'}><span>💰 Pago em dinheiro</span></label>
+            <label><input type="radio" name="forma_pag" value="permuta" ${pm.permuta ? 'checked' : ''}><span>🎁 Permuta (produto)</span></label>
+          </div>
+          <div class="permuta-campos" id="permuta-campos" ${pm.permuta ? '' : 'hidden'}>
+            <label class="campo largo"><span>O que a marca vai dar em troca</span><input name="permuta_produtos" value="${esc(pm.produtos || '')}" placeholder="Ex.: kit com 3 produtos + 1 vestido"></label>
+            <label class="campo"><span>Valor estimado dos produtos (R$)</span><input name="permuta_valor" data-moeda value="${pm.valor_estimado != null ? Number(pm.valor_estimado).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}" placeholder="0,00"></label>
+            <p class="desc">Permuta não entra no "a receber". O valor estimado aparece só para você saber quanto a parceria valeu.</p>
+          </div>`; })()}
           <div class="acordo" id="acordo-itens"></div>
           <button type="button" class="add-coluna acordo-add" data-acordo-add>+ Adicionar entrega</button>
           <div class="grade-campos" style="margin-top:12px">
             ${campo('entregaveis', 'Resumo das entregas', m.entregaveis, { largo: true, attrs: 'placeholder="Ex.: 1 reels + 1 foto"' })}
-            <label class="campo"><span>Valor cobrado (R$)</span><input name="valor" value="${esc(valorTxt)}" inputmode="decimal" placeholder="0,00"><small class="sugestao-valor" id="sugestao-valor"></small></label>
-            ${campo('data_pagamento', 'Pagamento previsto para', m.data_pagamento, { attrs: 'type="date"' })}
-            ${campo('lembrar_cobranca', 'Me lembrar de cobrar em', m.lembrar_cobranca, { attrs: 'type="date"' })}
+            <label class="campo so-dinheiro"><span>Valor cobrado (R$)</span><input name="valor" value="${esc(valorTxt)}" inputmode="decimal" placeholder="0,00"><small class="sugestao-valor" id="sugestao-valor"></small></label>
+            <div class="so-dinheiro">${campo('data_pagamento', 'Pagamento previsto para', m.data_pagamento, { attrs: 'type="date"' })}</div>
+            <div class="so-dinheiro">${campo('lembrar_cobranca', 'Me lembrar de cobrar em', m.lembrar_cobranca, { attrs: 'type="date"' })}</div>
           </div>
-          <div class="dur-escolha licenca-rapida"><span>Lembrar</span><button type="button" data-cobrar="0">no dia do pagamento</button><button type="button" data-cobrar="1">1 dia depois</button><button type="button" data-cobrar="3">3 dias depois</button><button type="button" data-cobrar="7">7 dias depois</button></div>
+          <div class="dur-escolha licenca-rapida so-dinheiro"><span>Lembrar</span><button type="button" data-cobrar="0">no dia do pagamento</button><button type="button" data-cobrar="1">1 dia depois</button><button type="button" data-cobrar="3">3 dias depois</button><button type="button" data-cobrar="7">7 dias depois</button></div>
         </fieldset>
 
         <fieldset id="sec-prazo"><legend>O que preciso para criar</legend>
@@ -594,7 +604,15 @@
 
     // ===== Acordo: entregas item por item, com sugestão de valor pelos seus preços =====
     const servicos = window.Simulador ? Simulador.itens().filter(i => i.nome) : [];
-    let acordo = Array.isArray(m.acordo) ? m.acordo.filter(x => !x.envio).map(x => ({ ...x })) : [];
+    let acordo = Array.isArray(m.acordo) ? m.acordo.filter(x => !x.envio && !x.permuta).map(x => ({ ...x })) : [];
+    // Permuta: esconde valor, pagamento e cobrança
+    const ajustarForma = () => {
+      const perm = (form.querySelector('input[name="forma_pag"]:checked') || {}).value === 'permuta';
+      dlg.querySelector('#permuta-campos').hidden = !perm;
+      dlg.querySelectorAll('.so-dinheiro').forEach(el => { el.style.display = perm ? 'none' : ''; });
+    };
+    form.querySelectorAll('input[name="forma_pag"]').forEach(r => r.addEventListener('change', ajustarForma));
+    setTimeout(ajustarForma, 0);
     // Itens que a marca vai enviar (produto, briefing, cupom...), cada um com "recebido" e a data
     let envio = Array.isArray(m.acordo) ? m.acordo.filter(x => x.envio).map(x => ({ ...x })) : [];
     function desenharEnvio() {
@@ -726,8 +744,9 @@
       if (!nome) { erroFicha('Coloque o nome da marca.'); f.nome.focus(); return; }
       const txt = (n) => { const v = f[n].value.trim(); return v || null; };
       const valorBruto = f.valor.value.trim().replace(/[R$\s]/g, '');
-      const valor = valorBruto ? Number(valorBruto.includes(',') ? valorBruto.replace(/\./g, '').replace(',', '.') : valorBruto) : null;
-      if (valorBruto && !isFinite(valor)) { erroFicha('Confira o valor. Use só números, por exemplo 1.500,00.'); f.valor.focus(); return; }
+      const ehPermuta = (f.querySelector('input[name="forma_pag"]:checked') || {}).value === 'permuta';
+      const valor = ehPermuta ? null : valorBruto ? Number(valorBruto.includes(',') ? valorBruto.replace(/\./g, '').replace(',', '.') : valorBruto) : null;
+      if (!ehPermuta && valorBruto && !isFinite(valor)) { erroFicha('Confira o valor. Use só números, por exemplo 1.500,00.'); f.valor.focus(); return; }
       const tdn = f.querySelector('input[name="trabalharia_de_novo"]:checked');
       const dados = {
         nome, nicho: txt('nicho'), contato_nome: txt('contato_nome'), contato_whatsapp: txt('contato_whatsapp'),
@@ -739,7 +758,11 @@
         data_recebimento: txt('data_recebimento'), prazo_dias: f.prazo_dias.value === '' ? null : Math.max(0, Math.min(365, parseInt(f.prazo_dias.value, 10))),
         prazo_tipo: f.prazo_tipo.value, data_entrega: txt('data_entrega'), data_entregue: txt('data_entregue'),
         pago: f.pago.checked, data_pagamento: txt('data_pagamento'), nf_emitida: f.nf_emitida.checked, nf_numero: txt('nf_numero'),
-        acordo: acordo.concat(envio.filter(x => String(x.item || '').trim())), lembrar_cobranca: txt('lembrar_cobranca'), repescagem_em: txt('repescagem_em'),
+        acordo: acordo.concat(envio.filter(x => String(x.item || '').trim()), (() => {
+          if ((f.querySelector('input[name="forma_pag"]:checked') || {}).value !== 'permuta') return [];
+          const b = f.permuta_valor.value.trim().replace(/[R$\s]/g, ''), n = b ? Number(b.includes(',') ? b.replace(/\./g, '').replace(',', '.') : b) : null;
+          return [{ permuta: true, produtos: f.permuta_produtos.value.trim() || null, valor_estimado: isFinite(n) ? n : null }];
+        })()), lembrar_cobranca: txt('lembrar_cobranca'), repescagem_em: txt('repescagem_em'),
         contrato_link: txt('contrato_link'), uso_imagem_tipo: f.uso_imagem_tipo.value || null, uso_imagem_ate: txt('uso_imagem_ate'), exclusividade_ate: txt('exclusividade_ate'),
         feedback_nota: f.feedback_nota.value ? Number(f.feedback_nota.value) : null, feedback_texto: txt('feedback_texto'), feedback_melhorar: txt('feedback_melhorar'),
         trabalharia_de_novo: tdn ? tdn.value === 'sim' : null, notas: txt('notas')

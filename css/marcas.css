@@ -246,3 +246,7 @@
 .fb-selos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 
 .fb-melhorar { background: var(--lilas-claro); color: var(--lilas-texto); border-radius: 12px; padding: 8px 10px; font-size: .85rem; margin: 0 0 10px; word-break: break-word; }
+.forma-pag { clear: both; margin-bottom: 12px; }
+.permuta-campos { background: var(--lilas-claro); border-radius: 14px; padding: 12px; margin-bottom: 12px; display: grid; gap: 10px; }
+.permuta-campos[hidden] { display: none; }
+.valor-tag.permuta { background: var(--lilas-claro); color: var(--lilas-texto); }
