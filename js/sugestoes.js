@@ -82,7 +82,7 @@
     const marcas = window.Marcas ? Marcas.lista() : [], pros = window.Prospeccao ? Prospeccao.lista() : [];
     // Marcas que já estão em conversa (não incomodar)
     const emConversa = new Set(marcas.filter(m => !['concluida', 'perdida'].includes(m.etapa)).map(m => chave(m.nome))
-      .concat(pros.filter(p => p.status === 'enviada' && (p.followups || 0) < 2 || p.status === 'respondeu').map(p => chave(p.marca))));
+      .concat(pros.filter(p => ['enviada', 'contato'].includes(p.status) && (p.followups || 0) < 2 || p.status === 'respondeu').map(p => chave(p.marca))));
 
     // Ex-clientes: a última parceria de cada marca
     const ex = {};
@@ -99,7 +99,7 @@
     pros.forEach(p => {
       const k = chave(p.marca);
       if (ex[k] || emConversa.has(k) || alvos.some(a => a.k === k)) return;
-      const repescar = p.status === 'recusada' || (p.status === 'enviada' && (p.followups || 0) >= 2);
+      const repescar = p.status === 'recusada' || (['enviada', 'contato'].includes(p.status) && (p.followups || 0) >= 2);
       if (!repescar) return;
       alvos.push({ k, tipo: p.status === 'recusada' ? 'agora-nao' : 'sem-resposta', marca: p.marca, nicho: p.nicho, contato: p.contato_nome, zap: p.whatsapp, email: p.email, ig: p.instagram, vence: p.proximo_followup || somaDias(p.data_abordagem, diasRep()), prosId: p.id });
     });

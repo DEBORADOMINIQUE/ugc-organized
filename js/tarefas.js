@@ -162,9 +162,12 @@
     return false;
   }
   // Tudo o que acontece num dia (inclui as repetições, como cópias marcadas com _rep)
-  function doDiaT(iso) {
-    return tarefas.filter(t => t.repetir ? repeteEm(t, iso) : t.data === iso).map(t => t.repetir ? { ...t, data: iso, concluida: false, _rep: true } : t);
+  const estadoDia = (t, iso) => (t.ocorrencias && t.ocorrencias[iso]) || '';
+  function doDiaT(iso, comPuladas) {
+    return tarefas.filter(t => t.repetir ? repeteEm(t, iso) && (comPuladas || estadoDia(t, iso) !== 'pulada') : t.data === iso)
+      .map(t => t.repetir ? { ...t, data: iso, concluida: estadoDia(t, iso) === 'feita', _estado: estadoDia(t, iso), _rep: true } : t);
   }
+  const puladasDoDia = (iso) => doDiaT(iso, true).filter(t => t._estado === 'pulada');
   function cargaDia(iso, r, ignorarId) { return doDiaT(iso).filter(t => !LIVRES.includes(t.categoria)).filter(t => t.data === iso && t.id !== ignorarId).reduce((s, t) => s + (t.concluida && t.duracao_real_min ? t.duracao_real_min : duracaoReal(t, r)), 0); }
   // Feriado nacional (não facultativo) conta como folga: nada de sugerir trabalho
   const ehDiaDeTrabalho = (iso) => (prefs || PREFS_PADRAO).dias.includes(diaSemana(iso)) && !(window.Feriados && Feriados.folga(iso));
@@ -200,19 +203,67 @@
   function conferirLembretes() {
     const agora = Date.now(), ja = avisados();
     tarefas.filter(t => !t.repetir).concat(doDiaT(hoje()).filter(t => t._rep), doDiaT(somaDias(hoje(), 1)).filter(t => t._rep)).forEach(t => {
-      if (t.concluida || !t.data || !t.hora) return;
+      if (t.concluida || !t.data || !t.hora || t.iniciada_em || t._estado === 'fazendo') return;
       const inicio = new Date(deISO(t.data).getTime() + minutos(t.hora) * 60000).getTime();
       const chave = `${t.id}|${t.data}|${hora5(t.hora)}`;
       if (agora >= inicio - t.lembrete_min * 60000 && agora < inicio + 15 * 60000 && !ja.includes(chave)) {
         marcarAvisado(chave);
         const faltam = Math.round((inicio - agora) / 60000);
         const msg = faltam > 0 ? `Daqui a ${durTxt(faltam)}: ${t.titulo}` : `Está na hora: ${t.titulo}`;
-        toast('⏰ ' + msg);
+        mostrarLembrete(t, faltam);
         try { if ('Notification' in window && Notification.permission === 'granted') new Notification('UGC Organized', { body: msg, tag: chave }); } catch (e) {}
       }
     });
     atualizarSelo();
     if (visao === 'hoje' && raiz.classList.contains('ativo')) $$('.cronometro[data-desde]').forEach(c => { c.textContent = durTxt(Number(c.dataset.acc || 0) + (Date.now() - new Date(c.dataset.desde)) / 60000); });
+  }
+
+  // Cartão do lembrete: diz do que é e deixa resolver ali mesmo
+  function mostrarLembrete(t, faltam) {
+    let box = document.getElementById('lembretes-box');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'lembretes-box'; document.body.appendChild(box);
+      box.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-lem]'); if (!b) return;
+        const card = b.closest('.lembrete-card'), id = card.dataset.id, dia = card.dataset.dia;
+        card.remove();
+        if (b.dataset.lem === 'feito') return resolverDia(id, dia, 'feita');
+        if (b.dataset.lem === 'indo') return resolverDia(id, dia, 'fazendo');
+        if (b.dataset.lem === 'cancelar') return resolverDia(id, dia, 'pulada');
+        if (b.dataset.lem === 'ver') { const a = document.querySelector('[data-tab="aba-tarefas"]'); if (a) a.click(); }
+      });
+    }
+    const c = cat(t), quando = faltam > 0 ? `Daqui a ${durTxt(faltam)}` : 'Está na hora';
+    const card = document.createElement('div');
+    card.className = 'lembrete-card'; card.dataset.id = t.id; card.dataset.dia = t.data;
+    card.innerHTML = `<button class="lem-fechar" data-lem="fechar" aria-label="Fechar">✕</button>
+      <div class="lem-quando">⏰ ${quando} · ${hora5(t.hora)}${t.data !== hoje() ? ' de ' + nomeDia(t.data).toLowerCase() : ''}</div>
+      <div class="lem-titulo">${c.emoji} ${esc(t.titulo)}</div>
+      <div class="lem-meta">${c.nome} · ${durTxt(t.duracao_min)}${t.notas ? ' · ' + esc(t.notas.slice(0, 80)) : ''}</div>
+      <div class="lem-acoes"><button class="crono-btn fim" data-lem="feito">✓ Concluído</button><button class="crono-btn" data-lem="indo">▶ Indo fazer</button><button class="crono-btn" data-lem="cancelar">✕ Cancelar hoje</button></div>`;
+    box.appendChild(card);
+  }
+
+  // Concluído / Indo fazer / Cancelar hoje, para qualquer tarefa (repetida ou não)
+  async function resolverDia(id, dia, estado, botao) {
+    const t = tarefas.find(x => x.id === id); if (!t) return;
+    try {
+      if (t.repetir) {
+        const oc = { ...(t.ocorrencias || {}) };
+        if (estado) oc[dia] = estado; else delete oc[dia];
+        await salvarTarefa(id, { ocorrencias: oc });
+      } else if (estado === 'feita') { if (!t.concluida) return concluir(id, botao); }
+      else if (estado === 'fazendo') { if (!t.iniciada_em) return comecar(id); }
+      else if (estado === 'pulada') await salvarTarefa(id, { data: null, iniciada_em: null });
+      desenhar();
+      if (estado === 'feita') { if (botao) comemorar(botao); toast(`${G.t('Arrasou', 'Mandou bem')}, ${G.apelido()}! ✦`); }
+      else if (estado === 'fazendo') toast(`Vai lá, ${G.apelido()} ✦ Quando terminar, é só tocar em Concluído.`);
+      else if (estado === 'pulada') toast(t.repetir ? `Cancelei ${t.titulo} só de ${nomeDia(dia).toLowerCase()}. Os outros dias continuam.` : `Tirei ${t.titulo} de hoje. Ela fica em "Sem horário ainda".`);
+      else toast('Pronto, voltou para a lista.');
+    } catch (e) {
+      console.error(e);
+      toast(/ocorrencias/i.test((e && e.message) || '') ? 'Falta um ajuste no banco: rode o tarefas-dia.sql no Supabase.' : 'Não consegui salvar agora.', true);
+    }
   }
 
   // ===== Agenda do celular: .ics com alarme e link do Google Agenda =====
@@ -248,9 +299,11 @@
 
   // ===== Desenho =====
   function atualizarSelo() {
-    const n = tarefas.filter(t => !t.concluida && t.data && t.data <= hoje()).length;
+    const h = hoje(), agora = hhmm(new Date().getHours() * 60 + new Date().getMinutes());
+    const pend = tarefas.filter(t => !t.repetir && !t.concluida && t.data && t.data < h)
+      .concat(doDiaT(h).filter(t => !t.concluida && (!t._rep || !t.hora || hora5(t.hora) <= agora)));
     const selo = document.querySelector('[data-tab="aba-tarefas"] .selo-aba');
-    if (selo) { selo.textContent = n; selo.hidden = !n; }
+    if (selo) { selo.textContent = pend.length; selo.hidden = !pend.length; selo.title = pend.length ? 'Pendente: ' + pend.map(t => t.titulo).join(', ') : ''; }
   }
 
   function barraCarga(carga, cap) {
@@ -264,8 +317,8 @@
     atualizarSelo();
     raiz.querySelector('.saudacao').textContent = `${saudacaoHora()}, ${nomeDela()}! Seu dia, no seu ritmo.`;
     const r = ritmo(), h = hoje(), carga = cargaDia(h, r), cap = r.capacidade;
-    const feitoHoje = doDiaT(h).filter(t => t.concluida).length, totalHoje = doDiaT(h).filter(t => !t._rep).length;
-    const atrasadas = tarefas.filter(t => !t.concluida && t.data && t.data < h).sort((a, b) => a.data.localeCompare(b.data));
+    const feitoHoje = doDiaT(h).filter(t => t.concluida).length, totalHoje = doDiaT(h).length;
+    const atrasadas = tarefas.filter(t => !t.repetir && !t.concluida && t.data && t.data < h).sort((a, b) => a.data.localeCompare(b.data));
     let frase;
     if (!ehDiaDeTrabalho(h) && !totalHoje) frase = 'Hoje é dia de folga na sua rotina. Descansar também é produtividade, ' + G.apelido() + ' ✦';
     else if (carga > cap) frase = `Hoje está acima do seu ritmo (${durTxt(carga)} de ${durTxt(cap)}). Que tal passar algo para outro dia?`;
@@ -297,13 +350,19 @@
     const fator = r.fatores[t.categoria];
     return `<div class="tarefa ${t.concluida ? 'feita' : ''} ${t.iniciada_em && !t.concluida ? 'rolando' : ''}" data-tid="${t.id}">
       <div class="t-hora">${t.hora ? hora5(t.hora) : '--:--'}${mostrarDia && t.data ? `<small>${nomeDia(t.data)}</small>` : ''}</div>
-      ${t._rep ? `<span class="t-check rep" title="Se repete">🔁</span>` : `<button class="t-check" data-concluir="${t.id}" aria-label="${t.concluida ? 'Desmarcar' : 'Concluir'} ${esc(t.titulo)}">${t.concluida ? '✓' : ''}</button>`}
+      ${t._rep ? `<button class="t-check rep" data-dia-estado="${t.concluida ? '' : 'feita'}" data-id="${t.id}" data-dia="${t.data}" aria-label="${t.concluida ? 'Desmarcar' : 'Concluir'} ${esc(t.titulo)}" title="Se repete. Toque para concluir só este dia.">${t.concluida ? '✓' : '🔁'}</button>` : `<button class="t-check" data-concluir="${t.id}" aria-label="${t.concluida ? 'Desmarcar' : 'Concluir'} ${esc(t.titulo)}">${t.concluida ? '✓' : ''}</button>`}
       <div class="t-corpo" data-editar="${t.id}">
         <div class="t-titulo">${esc(t.titulo)}</div>
         <div class="t-meta"><span class="chip">${c.emoji} ${c.nome}</span>${m ? `<span class="chip marca">💼 ${esc(m.nome)}</span>` : ''}
           <span>${durTxt(t.duracao_min)}${fator && Math.abs(fator - 1) > .15 && !t.concluida ? ` <em title="Pelo seu histórico">(costuma levar ${durTxt(duracaoReal(t, r))})</em>` : ''}</span>
           ${t.concluida && t.duracao_real_min ? `<span>levou ${durTxt(t.duracao_real_min)}</span>` : ''}</div>
       </div>
+      ${t._rep && !t.concluida && t.data === hoje() ? (t._estado === 'fazendo'
+        ? `<div class="crono-grupo"><span class="chip fazendo">▶ Fazendo agora</span>
+            <button class="crono-btn fim" data-dia-estado="feita" data-id="${t.id}" data-dia="${t.data}">✓ Concluído</button></div>`
+        : `<div class="crono-grupo"><button class="crono-btn" data-dia-estado="fazendo" data-id="${t.id}" data-dia="${t.data}">▶ Indo fazer</button>
+            <button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Só hoje. Os outros dias continuam.">✕ Cancelar hoje</button></div>`) : ''}
+      ${!t._rep && !t.concluida && t.data === hoje() && !t.iniciada_em && !acumulado(t) ? `<button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Tirar de hoje">✕ Hoje não</button>` : ''}
       ${!t._rep && !t.concluida && t.data === hoje() ? (t.iniciada_em
         ? `<div class="crono-grupo"><span class="cronometro" data-desde="${t.iniciada_em}" data-acc="${acumulado(t)}">${durTxt(tempoTotal(t))}</span>
             <button class="crono-btn" data-pausar="${t.id}" title="Pausar" aria-label="Pausar">⏸</button>
@@ -328,6 +387,7 @@
         <h2>${maiuscula(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>
         <p class="desc">Toque no círculo para concluir. Use "Começar" para eu cronometrar e aprender quanto tempo você leva.</p>
         <div class="lista-tarefas">${doDia.map(t => itemTarefa(t, r)).join('') || `<p class="vazio">Nada reservado para hoje. Que tal reservar um horário para algo importante?</p>`}</div>
+        ${puladasDoDia(h).length ? `<p class="puladas">Cancelado só hoje: ${puladasDoDia(h).map(t => `<span>${esc(t.titulo)} <button class="link-mini" data-dia-estado="" data-id="${t.id}" data-dia="${h}">desfazer</button></span>`).join(' · ')}</p>` : ''}
         <button class="add-coluna" data-nova-tarefa="${h}">+ Reservar horário hoje</button>
       </div>
       ${semDia.length ? `<div class="cartao"><h2>Sem horário ainda</h2><p class="desc">Ideias e pendências esperando um horário reservado.</p>
@@ -747,8 +807,9 @@
       </div>
       <div id="t-conteudo"><p class="carregando">Carregando suas tarefas...</p></div>`;
     raiz.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-nova-tarefa], [data-concluir], [data-comecar], [data-pausar], [data-editar-tempo], [data-editar], [data-tvis], [data-plano], [data-reagendar-atrasadas], [data-equilibrar], [data-ics-semana], [data-notificar], [data-ajustar-rotina]');
+      const a = e.target.closest('[data-dia-estado], [data-nova-tarefa], [data-concluir], [data-comecar], [data-pausar], [data-editar-tempo], [data-editar], [data-tvis], [data-plano], [data-reagendar-atrasadas], [data-equilibrar], [data-ics-semana], [data-notificar], [data-ajustar-rotina]');
       if (!a) return;
+      if (a.matches('[data-dia-estado]')) return resolverDia(a.dataset.id, a.dataset.dia, a.dataset.diaEstado || null, a);
       if (a.matches('[data-nova-tarefa]')) return abrirTarefa(null, a.dataset.novaTarefa || null);
       if (a.matches('[data-concluir]')) return concluir(a.dataset.concluir, a);
       if (a.matches('[data-comecar]')) return comecar(a.dataset.comecar);

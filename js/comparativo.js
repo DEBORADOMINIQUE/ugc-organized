@@ -37,7 +37,7 @@
     return [
       { grupo: 'Prospecção', id: 'abordagens', nome: 'Abordagens feitas', fmt: 'n', meta: true, calc: (k) => doMes(pr, 'data_abordagem', k).length,
         dica: 'Reserve um horário fixo nas Tarefas só para prospectar.' },
-      { grupo: 'Prospecção', id: 'respostas', nome: 'Marcas que responderam', fmt: 'n', calc: (k) => doMes(pr, 'data_abordagem', k).filter(p => p.status !== 'enviada').length,
+      { grupo: 'Prospecção', id: 'respostas', nome: 'Marcas que responderam', fmt: 'n', calc: (k) => doMes(pr, 'data_abordagem', k).filter(p => !['enviada', 'contato'].includes(p.status)).length,
         dica: 'Faça o follow-up no 3º dia: muitas marcas só respondem na segunda mensagem.' },
       { grupo: 'Prospecção', id: 'aprovadas', nome: 'Aprovadas', fmt: 'n', calc: (k) => doMes(pr, 'data_abordagem', k).filter(p => p.status === 'aprovada').length },
       { grupo: 'Prospecção', id: 'taxa', nome: 'Taxa de aprovação', fmt: '%', calc: (k) => { const l = doMes(pr, 'data_abordagem', k); return l.length >= 3 ? l.filter(p => p.status === 'aprovada').length / l.length : null; },

@@ -141,3 +141,22 @@
 /* ✕ das datas (campos.js): esconde junto quando a data está escondida */
 .data-linha:has(input[hidden]) { display: none; }
 .campo .data-linha { width: 100%; }
+
+/* ===== Lembrete com ações ===== */
+#lembretes-box { position: fixed; right: 20px; bottom: 20px; z-index: 9000; display: flex; flex-direction: column; gap: 12px; max-width: min(380px, calc(100vw - 32px)); }
+.lembrete-card { position: relative; background: var(--branco, #fff); border: 2px solid var(--vinho, #ff1493); border-radius: 22px; padding: 16px 18px; box-shadow: 0 14px 40px rgba(46, 11, 34, .25); color: var(--ameixa, #2e0b22); animation: lemEntra .25s ease-out; }
+@keyframes lemEntra { from { transform: translateY(16px); opacity: 0; } }
+.lem-quando { font-size: .85rem; font-weight: 800; color: var(--vinho, #ff1493); letter-spacing: .02em; padding-right: 26px; }
+.lem-titulo { font-size: 1.2rem; font-weight: 800; margin: 4px 0 2px; }
+.lem-meta { font-size: .9rem; opacity: .75; margin-bottom: 12px; }
+.lem-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.lem-fechar { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 1rem; color: var(--ameixa, #2e0b22); opacity: .5; cursor: pointer; }
+.lem-fechar:hover { opacity: 1; }
+:root[data-genero="masculino"] .lembrete-card { border-radius: 12px; }
+@media (max-width: 600px) { #lembretes-box { left: 16px; right: 16px; bottom: 16px; max-width: none; } }
+.t-check.rep { font-size: .85rem; color: inherit; }
+.tarefa.feita .t-check.rep { color: #fff; }
+.chip.fazendo { background: var(--lima-gel, #d4ff3a); color: #2f4a00; font-weight: 800; }
+.puladas { font-size: .9rem; opacity: .8; margin: 10px 0 0; }
+.puladas span { text-decoration: line-through; }
+.puladas .link-mini { text-decoration: underline; border: 0; background: none; color: var(--vinho, #ff1493); font-weight: 700; cursor: pointer; padding: 0 2px; }

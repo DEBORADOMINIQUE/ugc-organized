@@ -59,7 +59,7 @@
     });
 
     if (window.Prospeccao) Prospeccao.lista().forEach(p => {
-      if (p.status === 'enviada' && p.proximo_followup === iso) lista.push({ tipo: 'marca', titulo: `Follow-up da abordagem: ${p.marca}`, emoji: '📸', abrir: () => document.querySelector('[data-tab="aba-prospeccao"]').click() });
+      if (['enviada', 'contato'].includes(p.status) && p.proximo_followup === iso) lista.push({ tipo: 'marca', titulo: `Follow-up da abordagem: ${p.marca}`, emoji: '📸', abrir: () => document.querySelector('[data-tab="aba-prospeccao"]').click() });
     });
 
     const b = busca.toLowerCase();

@@ -14,6 +14,7 @@
     outro:      { nome: 'Outro',        emoji: '✦' }
   };
   const STATUS = {
+    contato:   { nome: 'Primeiro contato', cor: 'neutro' },
     enviada:   { nome: 'Sem resposta', cor: 'neutro' },
     respondeu: { nome: 'Respondeu',    cor: 'alerta' },
     aprovada:  { nome: 'Aprovada',     cor: 'ok' },
@@ -42,7 +43,7 @@
   const digitos = (t) => { let d = String(t || '').replace(/\D/g, ''); if (d.length === 10 || d.length === 11) d = '55' + d; return d; };
   const meta = () => (window.Tarefas && Tarefas.prefs().meta_abordagens) || META_PADRAO;
   const nomeDela = () => (window.Tarefas ? Tarefas.nome() : G.apelido());
-  const respondida = (p) => p.status !== 'enviada';
+  const respondida = (p) => !['enviada', 'contato'].includes(p.status);
 
   function toast(msg, erro) {
     let t = document.getElementById('toast-marcas');
@@ -103,7 +104,7 @@
 
   function paraHoje() {
     const h = hoje();
-    return lista.filter(p => p.status === 'enviada' && (p.followups || 0) < 2 && p.proximo_followup && p.proximo_followup <= h)
+    return lista.filter(p => ['enviada', 'contato'].includes(p.status) && (p.followups || 0) < 2 && p.proximo_followup && p.proximo_followup <= h)
       .sort((a, b) => a.proximo_followup.localeCompare(b.proximo_followup));
   }
 
@@ -215,7 +216,7 @@
   function abrirFicha(p) {
     const nova = !p || !!p._nova;
     const ultima = lista[0] || {};
-    if (nova) p = { canal: ultima.canal || 'instagram', abordagem_id: ultima.abordagem_id || '', data_abordagem: hoje(), status: 'enviada', ...(p || {}) };
+    if (nova) p = { canal: ultima.canal || 'instagram', abordagem_id: ultima.abordagem_id || '', data_abordagem: hoje(), status: 'contato', ...(p || {}) };
     const dlg = document.getElementById('ficha-marca');
     const campo = (n, r, v, a) => `<label class="campo"><span>${r}</span><input name="${n}" value="${esc(v ?? '')}" ${a || ''}></label>`;
     dlg.innerHTML = `<form class="ficha" novalidate>
@@ -281,7 +282,7 @@
       navigator.clipboard.writeText(txt).then(() => toast('Texto copiado ✦'), () => toast('Não consegui copiar.', true));
     });
     // Marcou que respondeu? Preenche a data de hoje.
-    $$('input[name="status"]', dlg).forEach(i => i.addEventListener('change', () => { if (i.value !== 'enviada' && !f.data_resposta.value) f.data_resposta.value = hoje(); }));
+    $$('input[name="status"]', dlg).forEach(i => i.addEventListener('change', () => { if (!['enviada', 'contato'].includes(i.value) && !f.data_resposta.value) f.data_resposta.value = hoje(); }));
 
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.oncancel = null;
@@ -301,11 +302,11 @@
       const marca = f.marca.value.trim();
       if (!marca) { proxima = false; f.marca.focus(); return erro('Coloque o nome da marca.'); }
       const t = (n) => f[n].value.trim() || null;
-      const status = f.status.value || 'enviada', data = f.data_abordagem.value || hoje();
+      const status = f.status.value || 'contato', data = f.data_abordagem.value || hoje();
       const dados = { marca, instagram: t('instagram'), nicho: t('nicho'), site: t('site'), contato_nome: t('contato_nome'), email: t('email'), whatsapp: t('whatsapp'),
         canal: f.canal.value || 'instagram', abordagem_id: f.abordagem_id.value || null, data_abordagem: data, status,
-        proximo_followup: status === 'enviada' ? (t('proximo_followup') || somaDias(data, DIAS_FOLLOWUP)) : status === 'recusada' ? (t('proximo_followup') || somaDias(hoje(), diasRepescagem())) : t('proximo_followup'),
-        data_resposta: status === 'enviada' ? null : (t('data_resposta') || hoje()), notas: t('notas') };
+        proximo_followup: ['enviada', 'contato'].includes(status) ? (t('proximo_followup') || somaDias(data, DIAS_FOLLOWUP)) : status === 'recusada' ? (t('proximo_followup') || somaDias(hoje(), diasRepescagem())) : t('proximo_followup'),
+        data_resposta: ['enviada', 'contato'].includes(status) ? null : (t('data_resposta') || hoje()), notas: t('notas') };
       // Já abordou essa marca antes? Avisa para não repetir sem querer.
       if (nova) {
         const u = usuario(dados.instagram).toLowerCase();
@@ -388,8 +389,8 @@
   async function mudarStatus(id, status) {
     const p = lista.find(x => x.id === id); if (!p) return;
     const anterior = p.status;
-    const dados = { status, data_resposta: status === 'enviada' ? null : (p.data_resposta || hoje()) };
-    if (status === 'enviada' && !p.proximo_followup) dados.proximo_followup = somaDias(hoje(), DIAS_FOLLOWUP);
+    const dados = { status, data_resposta: ['enviada', 'contato'].includes(status) ? null : (p.data_resposta || hoje()) };
+    if (['enviada', 'contato'].includes(status) && !p.proximo_followup) dados.proximo_followup = somaDias(hoje(), DIAS_FOLLOWUP);
     if (status === 'recusada') dados.proximo_followup = somaDias(hoje(), diasRepescagem()); // "agora não": volta na repescagem
     if (['respondeu', 'aprovada'].includes(status)) dados.proximo_followup = null;
     try {
@@ -478,11 +479,11 @@
     // Usada pelas Sugestões: abordagens que estão na hora da repescagem (sem resposta depois de 2 follow-ups, ou "agora não")
     repescagens() {
       const h = hoje();
-      return lista.filter(p => p.proximo_followup && p.proximo_followup <= h && (p.status === 'recusada' || (p.status === 'enviada' && (p.followups || 0) >= 2)));
+      return lista.filter(p => p.proximo_followup && p.proximo_followup <= h && (p.status === 'recusada' || (['enviada', 'contato'].includes(p.status) && (p.followups || 0) >= 2)));
     },
     // "Já mandei": recomeça o ciclo (follow-up em 3 dias)
     async reabordou(id) {
-      await salvar('prospeccoes', id, { status: 'enviada', followups: 0, data_abordagem: hoje(), ultimo_followup: null, proximo_followup: somaDias(hoje(), DIAS_FOLLOWUP), data_resposta: null });
+      await salvar('prospeccoes', id, { status: 'contato', followups: 0, data_abordagem: hoje(), ultimo_followup: null, proximo_followup: somaDias(hoje(), DIAS_FOLLOWUP), data_resposta: null });
       desenhar();
     },
     async adiar(id, dias) { await salvar('prospeccoes', id, { proximo_followup: somaDias(hoje(), dias) }); desenhar(); },
