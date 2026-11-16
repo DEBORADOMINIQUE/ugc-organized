@@ -19,7 +19,10 @@
     aprovada:  { nome: 'Aprovada',     cor: 'ok' },
     recusada:  { nome: 'Recusada',     cor: 'atraso' }
   };
-  const DIAS_FOLLOWUP = 3;
+  const DIAS_FOLLOWUP = 3;      // 1º follow-up: 3 dias sem resposta
+  const DIAS_FOLLOWUP2 = 7;     // 2º follow-up: 7 dias sem resposta
+  // Depois dos 2 follow-ups (ou de um "agora não"), a marca volta na repescagem: 30, 60 ou 90 dias (a pessoa escolhe)
+  const diasRepescagem = () => Number((window.Tarefas && Tarefas.prefs().repescagem_dias) || 60);
   const META_PADRAO = 10;
 
   let sb, raiz, lista = [], textos = [], visao = 'lista', filtro = 'todas', busca = '', carregado = false;
@@ -100,7 +103,7 @@
 
   function paraHoje() {
     const h = hoje();
-    return lista.filter(p => p.status === 'enviada' && p.proximo_followup && p.proximo_followup <= h)
+    return lista.filter(p => p.status === 'enviada' && (p.followups || 0) < 2 && p.proximo_followup && p.proximo_followup <= h)
       .sort((a, b) => a.proximo_followup.localeCompare(b.proximo_followup));
   }
 
@@ -301,7 +304,7 @@
       const status = f.status.value || 'enviada', data = f.data_abordagem.value || hoje();
       const dados = { marca, instagram: t('instagram'), nicho: t('nicho'), site: t('site'), contato_nome: t('contato_nome'), email: t('email'), whatsapp: t('whatsapp'),
         canal: f.canal.value || 'instagram', abordagem_id: f.abordagem_id.value || null, data_abordagem: data, status,
-        proximo_followup: status === 'enviada' ? (t('proximo_followup') || somaDias(data, DIAS_FOLLOWUP)) : t('proximo_followup'),
+        proximo_followup: status === 'enviada' ? (t('proximo_followup') || somaDias(data, DIAS_FOLLOWUP)) : status === 'recusada' ? (t('proximo_followup') || somaDias(hoje(), diasRepescagem())) : t('proximo_followup'),
         data_resposta: status === 'enviada' ? null : (t('data_resposta') || hoje()), notas: t('notas') };
       // Já abordou essa marca antes? Avisa para não repetir sem querer.
       if (nova) {
@@ -387,6 +390,8 @@
     const anterior = p.status;
     const dados = { status, data_resposta: status === 'enviada' ? null : (p.data_resposta || hoje()) };
     if (status === 'enviada' && !p.proximo_followup) dados.proximo_followup = somaDias(hoje(), DIAS_FOLLOWUP);
+    if (status === 'recusada') dados.proximo_followup = somaDias(hoje(), diasRepescagem()); // "agora não": volta na repescagem
+    if (['respondeu', 'aprovada'].includes(status)) dados.proximo_followup = null;
     try {
       const salvo = await salvar('prospeccoes', id, dados); desenhar();
       toast(`${p.marca}: ${STATUS[status].nome}`);
@@ -398,9 +403,11 @@
     const p = lista.find(x => x.id === id); if (!p) return;
     const n = (p.followups || 0) + 1;
     try {
-      // Depois do 2º follow-up sem resposta, para de lembrar (não vale insistir demais)
-      await salvar('prospeccoes', id, { followups: n, ultimo_followup: hoje(), proximo_followup: n >= 2 ? null : somaDias(hoje(), 5) });
-      desenhar(); toast(n >= 2 ? `Follow-up feito. Se ${p.marca} não responder, deixo quietinho ✦` : `Follow-up feito! Te lembro de novo em 5 dias ✦`);
+      // 1º follow-up feito: o 2º fica para o 7º dia. 2º feito: a marca vai para a repescagem.
+      const seg = somaDias(p.data_abordagem, DIAS_FOLLOWUP2);
+      const prox = n >= 2 ? somaDias(hoje(), diasRepescagem()) : (seg > hoje() ? seg : somaDias(hoje(), 4));
+      await salvar('prospeccoes', id, { followups: n, ultimo_followup: hoje(), proximo_followup: prox });
+      desenhar(); toast(n >= 2 ? `Follow-up feito. Se ${p.marca} não responder, ela volta na repescagem em ${diasRepescagem()} dias ✦` : `Follow-up feito! O segundo fica para ${fmtCurta(prox)} ✦`);
     } catch (e) { console.error(e); toast('Não consegui salvar agora.', true); }
   }
 
@@ -468,6 +475,17 @@
       }
     },
     aoAbrir() { desenhar(); },
+    // Usada pelas Sugestões: abordagens que estão na hora da repescagem (sem resposta depois de 2 follow-ups, ou "agora não")
+    repescagens() {
+      const h = hoje();
+      return lista.filter(p => p.proximo_followup && p.proximo_followup <= h && (p.status === 'recusada' || (p.status === 'enviada' && (p.followups || 0) >= 2)));
+    },
+    // "Já mandei": recomeça o ciclo (follow-up em 3 dias)
+    async reabordou(id) {
+      await salvar('prospeccoes', id, { status: 'enviada', followups: 0, data_abordagem: hoje(), ultimo_followup: null, proximo_followup: somaDias(hoje(), DIAS_FOLLOWUP), data_resposta: null });
+      desenhar();
+    },
+    async adiar(id, dias) { await salvar('prospeccoes', id, { proximo_followup: somaDias(hoje(), dias) }); desenhar(); },
     lista: () => (carregado ? lista : []),
     // Usada pelo Assistente: abre "registrar abordagem" já preenchida
     novaCom(dados) { document.querySelector('[data-tab="aba-prospeccao"]').click(); abrirFicha({ ...dados, _nova: true }); },

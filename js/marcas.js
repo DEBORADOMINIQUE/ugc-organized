@@ -146,6 +146,8 @@
       if (!m.data_entrega && m.prazo_dias != null) mud.data_entrega = somarPrazo(mud.data_recebimento || m.data_recebimento, m.prazo_dias, m.prazo_tipo);
     }
     if ((nova === 'entregue' || nova === 'concluida') && !m.data_entregue && m.data_entrega) mud.data_entregue = hoje();
+    // Em contato ou negociando sem data de follow-up: o app sugere daqui a 3 dias
+    if (['contato', 'negociando'].includes(nova) && !m.proximo_followup) mud.proximo_followup = somarPrazo(hoje(), 3, 'corridos');
     return mud;
   }
 
@@ -781,12 +783,13 @@
 
   function abrirRepescagem(m) {
     const dlg = document.getElementById('ficha-marca');
-    const sugerida = somarPrazo(hoje(), 60, 'corridos');
+    const diasRep = Number((window.Tarefas && Tarefas.prefs().repescagem_dias) || 60);
+    const sugerida = somarPrazo(hoje(), diasRep, 'corridos');
     dlg.innerHTML = `<form class="ficha" novalidate>
       <header class="ficha-cab"><div><small>Parceria finalizada ✦</small><h2>${esc(m.nome)} está no seu Banco de marcas</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
       <div class="ficha-corpo">
         <p class="desc" style="margin-top:12px">Marca que já trabalhou com você é a mais fácil de fechar de novo. Quando quer tentar uma nova parceria? Eu te lembro no dia, com a mensagem pronta.</p>
-        <div class="dur-escolha licenca-rapida">${[[30, '30 dias'], [60, '60 dias'], [90, '90 dias'], [180, '6 meses']].map(([d, n]) => `<button type="button" data-rep="${d}" class="${d === 60 ? 'ativo' : ''}">${n}</button>`).join('')}</div>
+        <div class="dur-escolha licenca-rapida">${[[30, '30 dias'], [60, '60 dias'], [90, '90 dias'], [180, '6 meses']].map(([d, n]) => `<button type="button" data-rep="${d}" class="${d === diasRep ? 'ativo' : ''}">${n}</button>`).join('')}</div>
         <label class="campo" style="margin-top:12px"><span>Tentar nova parceria em</span><input type="date" name="repescagem_em" value="${sugerida}"></label>
         ${!m.feedback_nota && !m.feedback_texto ? '<button type="button" class="link-precos" data-rep-feedback style="margin-top:14px">Guardar o feedback da marca agora</button>' : ''}
       </div>
@@ -928,6 +931,7 @@
     async atualizar(id, dados) { const salvo = await salvar(id, dados); if (raiz) desenhar(); return salvo; },
     // Usada pelo Simulador: abre a ficha de nova marca já com entregas e valor
     abrir(id) { const m = marcas.find(x => x.id === id); if (m) abrirFicha(m); },
+    atualizarSilencioso: (id, dados) => salvar(id, dados).then(() => raiz && desenhar()),
     novaCom(dados, opcoes) { const o = opcoes || {}; document.querySelector('[data-tab="aba-marcas"]').click(); abrirFicha({ etapa: 'negociando', prazo_tipo: 'corridos', historico: [], acordo: [], ...dados, _nova: true }, o.foco, o.aoSalvar); },
     FECHADAS,
     // Usada pela Prospecção: quando uma abordagem é aprovada, vira parceria no funil
