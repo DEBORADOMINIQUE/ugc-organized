@@ -24,7 +24,7 @@
 
   <!-- Supabase por CDN e depois a autenticação compartilhada -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="js/auth.js?v=4"></script>
+  <script src="js/auth.js?v=5"></script>
 
   <style>
     /* ===== Design system: as mesmas cores e fontes do portfólio ===== */
@@ -96,6 +96,9 @@
     .botao:disabled { opacity: .7; cursor: wait; }
     .voltar { display: block; margin: 18px auto 0; }
     .aceite a, .rodape a { color: var(--vinho); font-weight: 600; }
+    .linha-dupla { justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .manter { display: flex; align-items: center; gap: 8px; font-size: .9rem; font-weight: 500; color: var(--suave); cursor: pointer; }
+    .manter input { width: 18px; height: 18px; margin: 0; accent-color: var(--vinho); }
     .troca { text-align: center; margin-top: 16px; font-size: .95rem; color: var(--suave); }
     .aceite { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; font-size: .88rem; line-height: 1.4; margin: 4px 0 18px; }
     .aceite input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--vinho); }
@@ -110,8 +113,8 @@
 <body>
   <main class="cartao">
     <div class="logo"><span class="bolinha" aria-hidden="true"></span><b>UGC</b> organized</div>
-    <h1 id="titulo">Acesso restrito</h1>
-    <p class="sub" id="subtitulo">Faça login para ver os números do seu portfólio.</p>
+    <h1 id="titulo">Que bom te ver ✦</h1>
+    <p class="sub" id="subtitulo">Entre para organizar seu trabalho como UGC.</p>
 
     <div class="faixa erro" id="erro" role="alert"></div>
     <div class="faixa ok" id="ok" role="status"></div>
@@ -122,7 +125,10 @@
       <input id="email" type="email" autocomplete="email" required placeholder="voce@email.com">
       <label for="senha">Senha</label>
       <input id="senha" type="password" autocomplete="current-password" required placeholder="Sua senha">
-      <div class="linha"><button type="button" class="link" id="ir-recuperar">Esqueci minha senha</button></div>
+      <div class="linha linha-dupla">
+        <label class="manter"><input type="checkbox" id="manter" checked> <span>Manter conectada neste aparelho</span></label>
+        <button type="button" class="link" id="ir-recuperar">Esqueci minha senha</button>
+      </div>
       <button type="submit" class="botao" id="btn-entrar">Entrar</button>
       <p class="troca">Ainda não tem conta? <button type="button" class="link" id="ir-cadastro">Cadastre-se</button></p>
     </form>
@@ -249,6 +255,9 @@
       catch (err) { aviso('erro', err.message); carregando($('btn-codigo'), false); $('codigo').select(); }
     });
 
+    if (window.G && G.masc()) $('manter').nextElementSibling.textContent = 'Manter conectado neste aparelho';
+    try { $('manter').checked = Auth.lembrando(); } catch (e) {}
+
     // Envio do login
     $('form-login').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -256,6 +265,7 @@
       const senha = $('senha').value;
       if (!email || !senha) return aviso('erro', 'Preencha o e-mail e a senha.');
       aviso();
+      Auth.lembrar($('manter').checked);
       carregando($('btn-entrar'), true, 'Entrando...');
       try {
         await Auth.login(email, senha);

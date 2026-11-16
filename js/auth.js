@@ -9,7 +9,21 @@ const SUPABASE_URL = 'https://bquukmknxikfbkgqyxxh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxdXVrbWtueGlrZmJrZ3F5eHhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3NjM3MTcsImV4cCI6MjEwNzMzOTcxN30.1TJ0aFr7ednSGJ886ZUcNGdjA69-tVhWOFoOxObQN-k';
 
 // Cliente único, usado por todas as páginas
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Sempre na versão segura do domínio próprio (o login fica guardado num lugar só)
+if (location.hostname === 'ugcorganized.com.br' && location.protocol === 'http:') location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+
+// "Manter conectada neste aparelho": ligado (padrão) guarda o login para sempre;
+// desligado guarda só até fechar o navegador.
+const lembrarLogin = () => { try { return localStorage.getItem('oug_lembrar') !== 'nao'; } catch (e) { return true; } };
+const armazem = {
+  getItem(k) { try { return (lembrarLogin() ? localStorage : sessionStorage).getItem(k) || sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } },
+  setItem(k, v) { try { if (lembrarLogin()) { localStorage.setItem(k, v); sessionStorage.removeItem(k); } else { sessionStorage.setItem(k, v); localStorage.removeItem(k); } } catch (e) {} },
+  removeItem(k) { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {} }
+};
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: armazem }
+});
 
 // Monta o endereço de outra página na mesma pasta (funciona no GitHub Pages, na Vercel e no localhost)
 function urlDaPagina(nome) {
@@ -26,6 +40,10 @@ function paginaLimpa(nome) {
 window.Auth = {
   client: sb,
   pagina: paginaLimpa,
+
+  // Liga ou desliga "manter conectada" antes de entrar
+  lembrar(sim) { try { localStorage.setItem('oug_lembrar', sim ? 'sim' : 'nao'); } catch (e) {} },
+  lembrando: lembrarLogin,
 
   // Entra com e-mail e senha. Devolve o usuário ou lança um erro em português.
   async login(email, senha) {
