@@ -130,3 +130,6 @@ code { background: var(--creme); padding: 2px 6px; border-radius: 6px; word-brea
 .pw-ajuda { margin-top: 18px; font-size: .88rem; color: var(--suave); }
 .pw-ajuda a { color: var(--vinho); font-weight: 700; }
 .pw-cartao .logo { color: var(--ameixa); } .pw-cartao .logo b { color: var(--vinho); }
+
+.pw-selo { display: inline-block; background: var(--lima-claro); color: var(--lima-texto); font-weight: 800; font-size: .85rem; border-radius: 999px; padding: 6px 14px; margin-bottom: 14px; }
+.pw-plano s { font-size: .95rem; opacity: .7; }
