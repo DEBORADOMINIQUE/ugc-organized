@@ -487,6 +487,11 @@
       desenhar();
     },
     async adiar(id, dias) { await salvar('prospeccoes', id, { proximo_followup: somaDias(hoje(), dias) }); desenhar(); },
+    // Usadas pelas Sugestões: follow-ups do dia e "fiz o follow-up"
+    followupsHoje: () => (carregado ? paraHoje() : []),
+    fizFollowup: (id) => fizFollowup(id),
+    canal: (c) => (CANAIS[c] ? CANAIS[c].nome : c || ''),
+    status: (s) => (STATUS[s] ? STATUS[s].nome : s || ''),
     lista: () => (carregado ? lista : []),
     // Usada pelo Assistente: abre "registrar abordagem" já preenchida
     novaCom(dados) { document.querySelector('[data-tab="aba-prospeccao"]').click(); abrirFicha({ ...dados, _nova: true }); },

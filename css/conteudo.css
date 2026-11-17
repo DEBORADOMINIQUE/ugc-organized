@@ -119,3 +119,6 @@
 .sg-txt textarea { width: 100%; margin-top: 8px; font: inherit; font-size: .95rem; border: 1px solid var(--borda); border-radius: 12px; padding: 10px; background: var(--creme-claro); color: var(--ameixa); resize: vertical; }
 .sg-acoes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .sg-acoes .feito { background: var(--lima-claro); color: var(--lima-texto); }
+
+.sg-txt p.sg-hist, .sg-hist { font-size: .85rem; line-height: 1.45; color: var(--suave, #7d5470); margin: 4px 0 6px; }
+.sg-item.fu { border-left-color: var(--vinho, #ff1493); }

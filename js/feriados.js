@@ -41,6 +41,8 @@
     // { nome, facultativo } ou null
     de(dataIso) { if (!dataIso) return null; return doAno(Number(dataIso.slice(0, 4)))[dataIso.slice(0, 10)] || null; },
     // Feriado "de folga" (os facultativos não bloqueiam sugestão de trabalho)
-    folga(dataIso) { const f = this.de(dataIso); return !!(f && !f.facultativo); }
+    folga(dataIso) { const f = this.de(dataIso); return !!(f && !f.facultativo); },
+    // Todos os feriados do ano: { '2026-04-21': { nome, facultativo } }
+    ano: (a) => doAno(a)
   };
 })();

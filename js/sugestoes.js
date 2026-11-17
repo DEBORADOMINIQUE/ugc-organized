@@ -4,8 +4,11 @@
    a mensagem pronta, adaptada à marca e à data.
    1) Repescagem: "agora não", sem resposta depois de 2 follow-ups
       e ex-clientes sem parceria nova (30, 60 ou 90 dias).
-   2) Datas que vendem: Black Friday, Natal, Dia das Mães... avisa
-      de 3 a 5 semanas antes, cruzando com o nicho da marca.
+   2) Datas que vendem: Black Friday, Natal, Dia das Mães, feriados
+      prolongados... avisa de 3 a 5 semanas antes, cruzando com o nicho.
+   3) Follow-ups do dia (3 e 7 dias sem resposta).
+   Cada sugestão mostra o histórico da marca e a mensagem pronta,
+   e uma notificação por dia chama a pessoa pelo nome.
    ========================================================= */
 (function () {
   let raiz;
@@ -62,7 +65,14 @@
   // Datas entre 10 e 35 dias à frente (as marcas precisam de 3 a 4 semanas para produzir)
   function datasDaVez() {
     const h = hoje(), a = new Date().getFullYear();
-    return datasDoAno(a).concat(datasDoAno(a + 1)).map(x => ({ ...x, falta: diasEntre(h, x.iso) })).filter(x => x.falta >= 10 && x.falta <= 35).sort((x, y) => x.falta - y.falta);
+    return datasDoAno(a).concat(datasDoAno(a + 1), prolongados(a), prolongados(a + 1)).map(x => ({ ...x, falta: diasEntre(h, x.iso) })).filter(x => x.falta >= 10 && x.falta <= 35).sort((x, y) => x.falta - y.falta);
+  }
+  // Feriados que viram fim de semana longo (caem na segunda/sexta) ou "ponte" (terça/quinta)
+  const VIAGEM = ['viagem', 'turismo', 'hotel', 'pousada', 'lazer', 'bebida', 'moda praia', 'praia', 'restaurante', 'experiência', 'mala', 'protetor'];
+  function prolongados(a) {
+    if (!window.Feriados || !Feriados.ano) return [];
+    return Object.entries(Feriados.ano(a)).filter(([iso, f]) => !f.facultativo && !/Natal|Confraterniza/.test(f.nome) && [1, 2, 4, 5].includes(deISO(iso).getDay()))
+      .map(([iso, f]) => ({ nome: 'o feriado prolongado de ' + f.nome, d: deISO(iso), nichos: VIAGEM, gancho: 'é quando muita gente viaja, passeia e compra para aproveitar o descanso' }));
   }
   const combina = (data, nicho) => data.nichos.includes('*') || (nicho && data.nichos.some(p => chave(nicho).includes(p)));
 
@@ -71,8 +81,30 @@
   function texto(tipo, alvo, data) {
     const oi = primeiro(alvo.contato) ? `Oi, ${primeiro(alvo.contato)}! Tudo bem?` : 'Oi! Tudo bem?';
     if (tipo === 'data') return `${oi} ${data.nome.charAt(0).toUpperCase() + data.nome.slice(1)} está chegando (${fmtDia(data.iso)}) e pensei em um conteúdo UGC para a ${alvo.marca} aproveitar essa data e acelerar as vendas. Tenho algumas ideias de vídeo para a campanha. Posso te mandar?`;
+    if (tipo === 'fu1') return `${oi} Passando para saber se você conseguiu ver minha mensagem sobre conteúdos UGC para a ${alvo.marca}. Se fizer sentido, te mando algumas ideias de vídeo ✦`;
+    if (tipo === 'fu2') return `${oi} Só retomando nossa conversa sobre conteúdos UGC para a ${alvo.marca}. Se agora não for o momento, tudo bem! Fico à disposição para quando fizer sentido.`;
     if (tipo === 'ex') return `${oi} Faz um tempinho da nossa parceria com a ${alvo.marca} e eu amei o resultado. Tenho ideias novas de conteúdo para vocês. Posso te mandar uma proposta?`;
     return `${oi} Falamos há um tempo sobre conteúdos UGC para a ${alvo.marca}. Tenho ideias novas que combinam com o momento de vocês. Faz sentido conversarmos de novo?`;
+  }
+
+  // ===== Histórico da marca: último contato, o que foi proposto e a resposta =====
+  const fmtCurta = (iso) => iso ? deISO(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
+  const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const curto = (t, n) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  function historico(a) {
+    if (a.prosId && window.Prospeccao) {
+      const p = Prospeccao.lista().find(x => x.id === a.prosId); if (!p) return '';
+      const ult = p.ultimo_followup || p.data_abordagem;
+      const resp = p.status === 'recusada' ? 'disse "agora não"' : p.status === 'respondeu' ? 'respondeu' : (p.followups ? `sem resposta (${p.followups} follow-up${p.followups > 1 ? 's' : ''})` : 'sem resposta ainda');
+      return [ult && `Último contato: ${fmtCurta(ult)}${p.canal ? ' por ' + Prospeccao.canal(p.canal) : ''}`, `Proposta: ${p.texto_usado ? '"' + curto(p.texto_usado, 70) + '"' : 'abordagem de UGC'}`, `Resposta: ${resp}`].filter(Boolean).join(' · ');
+    }
+    if (a.marcaId && window.Marcas) {
+      const m = Marcas.lista().find(x => x.id === a.marcaId); if (!m) return '';
+      const itens = Array.isArray(m.acordo) ? m.acordo.filter(x => x.item).map(x => (x.qtd > 1 ? x.qtd + ' ' : '') + x.item) : [];
+      const permuta = Array.isArray(m.acordo) && m.acordo.some(x => x.permuta);
+      return [`Última parceria: ${fmtCurta(a.desde)}`, `Proposta: ${itens.length ? curto(itens.join(', '), 60) : 'conteúdo UGC'}${permuta ? ' (permuta)' : m.valor ? ' · ' + moeda(m.valor) : ''}`, 'Resposta: fechou ✓'].join(' · ');
+    }
+    return '';
   }
 
   // ===== Quem chamar hoje =====
@@ -105,6 +137,15 @@
     });
 
     const lista = [];
+    // 0) Follow-ups do dia (vêm primeiro: são as conversas que estão esfriando)
+    (window.Prospeccao && Prospeccao.followupsHoje ? Prospeccao.followupsHoje() : []).forEach(p => {
+      if (ativoAte(p.id + '|fu')) return;
+      const a = { k: chave(p.marca), tipo: 'fu', marca: p.marca, nicho: p.nicho, contato: p.contato_nome, zap: p.whatsapp, email: p.email, ig: p.instagram, prosId: p.id, fu: true };
+      const dias = diasEntre(p.ultimo_followup || p.data_abordagem, h);
+      lista.push({ id: p.id + '|fu', tipo: 'fu', alvo: a, peso: -10 + (p.followups || 0),
+        frase: `${nome()}, faz ${dias} dia${dias === 1 ? '' : 's'} que você mandou ${p.followups ? 'o follow-up' : 'a proposta'} para a <b>${esc(p.marca)}</b>. Bora fazer ${p.followups ? 'o último follow-up' : 'aquele follow-up'}?`,
+        msg: texto(p.followups ? 'fu2' : 'fu1', a) });
+    });
     // 1) Datas comerciais: marcas que combinam com a data (mesmo antes do prazo de repescagem)
     datasDaVez().forEach(data => {
       alvos.filter(a => combina(data, a.nicho) && !ativoAte(a.k + '|' + data.iso)).slice(0, 3).forEach(a => {
@@ -135,7 +176,8 @@
       </div>
       ${proxData && !lista.some(s => s.tipo === 'data') ? `<p class="sg-data">📅 ${proxData.nome.charAt(0).toUpperCase() + proxData.nome.slice(1)} é dia ${fmtDia(proxData.iso)} (faltam ${proxData.falta} dias). Cadastre o nicho das suas marcas para eu sugerir quem chamar.</p>` : ''}
       ${lista.slice(0, 5).map((s, i) => `<div class="sg-item ${s.tipo}">
-        <div class="sg-txt"><span class="sg-tag">${s.tipo === 'data' ? '📅 ' + esc(s.data.nome.replace(/^(o|a|as|os) /, '')) : '🔁 Repescagem'}</span><p>${s.frase}</p>
+        <div class="sg-txt"><span class="sg-tag">${s.tipo === 'data' ? '📅 ' + esc(s.data.nome.replace(/^(o|a|as|os) /, '')) : s.tipo === 'fu' ? '⏰ Follow-up' : '🔁 Repescagem'}</span><p>${s.frase}</p>
+          ${historico(s.alvo) ? `<p class="sg-hist">🗂 ${esc(historico(s.alvo))}</p>` : ''}
           <details><summary>Ver a mensagem pronta</summary><textarea data-sg-msg="${i}" rows="4">${esc(s.msg)}</textarea></details></div>
         <div class="sg-acoes">
           ${s.alvo.zap ? `<a class="mini-btn zap" target="_blank" rel="noopener" data-sg-zap="${i}" href="#">WhatsApp</a>` : ''}
@@ -148,6 +190,17 @@
       </div>`).join('')}
     </div>`;
     raiz._lista = lista;
+    avisarDoDia(lista);
+  }
+
+  // Uma notificação por dia (se a pessoa ligou os lembretes), chamando pelo nome
+  function avisarDoDia(lista) {
+    if (!lista.length || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const k = 'oug_sugestao_avisada', h = hoje();
+    try { if (localStorage.getItem(k) === h) return; localStorage.setItem(k, h); } catch (e) { return; }
+    const primeira = lista[0].frase.replace(/<[^>]+>/g, '');
+    const corpo = lista.length > 1 ? `${primeira} (e mais ${lista.length - 1} sugest${lista.length > 2 ? 'ões' : 'ão'} no app ✦)` : primeira;
+    try { new Notification('UGC Organized ✦', { body: corpo, tag: 'sugestoes-' + h }); } catch (e) {}
   }
 
   async function adiar(s, dias) {
@@ -159,6 +212,7 @@
 
   async function feito(s) {
     try {
+      if (s.tipo === 'fu') { await Prospeccao.fizFollowup(s.alvo.prosId); desenhar(); return; }
       if (s.alvo.prosId && window.Prospeccao) await Prospeccao.reabordou(s.alvo.prosId);
       if (s.alvo.marcaId && window.Marcas) await Marcas.atualizarSilencioso(s.alvo.marcaId, { repescagem_em: somaDias(hoje(), diasRep()) });
       await adiar(s, s.tipo === 'data' ? 60 : diasRep());
@@ -180,7 +234,10 @@
         if (b.dataset.sgEmail !== undefined) { e.preventDefault(); location.href = `mailto:${encodeURIComponent(s.alvo.email)}?subject=${encodeURIComponent(s.alvo.marca + ' · conteúdo UGC')}&body=${encodeURIComponent(msg)}`; return; }
         if (b.dataset.sgCopiar !== undefined) return navigator.clipboard.writeText(msg).then(() => toast('Mensagem copiada ✦'), () => toast('Não consegui copiar.'));
         if (b.dataset.sgFeito !== undefined) return feito(s);
-        if (b.dataset.sgAdiar !== undefined) { await adiar(s, 7); desenhar(); toast('Ok! Te lembro de novo em 7 dias.'); }
+        if (b.dataset.sgAdiar !== undefined) {
+          if (s.tipo === 'fu') { await Prospeccao.adiar(s.alvo.prosId, 2); desenhar(); return toast('Ok! Te lembro desse follow-up em 2 dias.'); }
+          await adiar(s, 7); desenhar(); toast('Ok! Te lembro de novo em 7 dias.');
+        }
       });
       setTimeout(desenhar, 1500); setTimeout(desenhar, 4000);
     },
