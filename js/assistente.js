@@ -64,6 +64,7 @@
     const texto = dlg.querySelector('#as-texto').value.trim();
     if (!texto && !imagens.length) return toast('Cole um texto ou envie um print.', true);
     const btn = dlg.querySelector('#as-ir'), res = dlg.querySelector('#as-resultado');
+    if (btn.disabled) return;   // já está lendo
     btn.disabled = true; btn.textContent = 'Lendo... ✦';
     res.innerHTML = '<div class="as-pensando"><span></span><span></span><span></span></div>';
     try {
@@ -94,7 +95,7 @@
       <header class="ficha-cab"><div><small>Raquel · sua assistente ✦</small><h2>Oi, ${window.Tarefas ? Tarefas.nome() : G.apelido()}! Sou a Raquel. O que aconteceu?</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
       <div class="ficha-corpo">
         <p class="desc" style="margin-top:12px">Cole a conversa com a marca, o e-mail, o briefing, ou só escreva do seu jeito ("abordei a Sallve pelo direct", "gravar o reels da Kaisan sexta às 14h", "comprei um microfone de 189"). Eu entendo e preencho a ficha certa.</p>
-        <label class="campo largo"><textarea id="as-texto" rows="7" placeholder="Cole ou escreva aqui..."></textarea></label>
+        <label class="campo largo"><textarea id="as-texto" rows="7" placeholder="Cole ou escreva aqui... (Enter envia · Shift + Enter pula linha)"></textarea></label>
         <div class="as-print">
           <label class="mini-btn"><input type="file" id="as-arquivo" accept="image/*" multiple hidden>📷 Enviar prints (pode marcar vários)</label>
           <div id="as-previa"></div>
@@ -105,7 +106,8 @@
     </div>`;
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.querySelector('#as-ir').addEventListener('click', processar);
-    dlg.querySelector('#as-texto').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) processar(); });
+    // Enter envia; Shift + Enter pula linha
+    dlg.querySelector('#as-texto').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); processar(); } });
     const previa = dlg.querySelector('#as-previa');
     const desenharPrevia = () => {
       previa.innerHTML = imagens.map((im, i) => `<div class="as-mini"><img src="${im.previa}" alt="Print ${i + 1}"><button type="button" data-tirar="${i}" aria-label="Tirar print ${i + 1}">×</button></div>`).join('')
