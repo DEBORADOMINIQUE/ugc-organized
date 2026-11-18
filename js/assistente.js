@@ -107,7 +107,17 @@
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.querySelector('#as-ir').addEventListener('click', processar);
     // Enter envia; Shift + Enter pula linha
-    dlg.querySelector('#as-texto').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); processar(); } });
+    const caixa = dlg.querySelector('#as-texto');
+    let shift = false;
+    caixa.addEventListener('keydown', (e) => {
+      shift = e.shiftKey;
+      if ((e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey && !e.altKey) { e.preventDefault(); processar(); }
+    });
+    caixa.addEventListener('keyup', (e) => { shift = e.shiftKey; });
+    // Teclados de celular às vezes não avisam o Enter no keydown: pega pela "quebra de linha"
+    caixa.addEventListener('beforeinput', (e) => {
+      if ((e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') && !shift) { e.preventDefault(); processar(); }
+    });
     const previa = dlg.querySelector('#as-previa');
     const desenharPrevia = () => {
       previa.innerHTML = imagens.map((im, i) => `<div class="as-mini"><img src="${im.previa}" alt="Print ${i + 1}"><button type="button" data-tirar="${i}" aria-label="Tirar print ${i + 1}">×</button></div>`).join('')
