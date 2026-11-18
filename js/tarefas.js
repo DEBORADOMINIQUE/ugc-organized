@@ -163,11 +163,12 @@
   }
   // Tudo o que acontece num dia (inclui as repetições, como cópias marcadas com _rep)
   const estadoDia = (t, iso) => (t.ocorrencias && t.ocorrencias[iso]) || '';
+  const foraDoDia = (e) => e === 'pulada' || String(e).startsWith('remarcada');
   function doDiaT(iso, comPuladas) {
-    return tarefas.filter(t => t.repetir ? repeteEm(t, iso) && (comPuladas || estadoDia(t, iso) !== 'pulada') : t.data === iso)
+    return tarefas.filter(t => t.repetir ? repeteEm(t, iso) && (comPuladas || !foraDoDia(estadoDia(t, iso))) : t.data === iso)
       .map(t => t.repetir ? { ...t, data: iso, concluida: estadoDia(t, iso) === 'feita', _estado: estadoDia(t, iso), _rep: true } : t);
   }
-  const puladasDoDia = (iso) => doDiaT(iso, true).filter(t => t._estado === 'pulada');
+  const puladasDoDia = (iso) => doDiaT(iso, true).filter(t => foraDoDia(t._estado));
   function cargaDia(iso, r, ignorarId) { return doDiaT(iso).filter(t => !LIVRES.includes(t.categoria)).filter(t => t.data === iso && t.id !== ignorarId).reduce((s, t) => s + (t.concluida && t.duracao_real_min ? t.duracao_real_min : duracaoReal(t, r)), 0); }
   // Feriado nacional (não facultativo) conta como folga: nada de sugerir trabalho
   const ehDiaDeTrabalho = (iso) => (prefs || PREFS_PADRAO).dias.includes(diaSemana(iso)) && !(window.Feriados && Feriados.folga(iso));
@@ -244,12 +245,47 @@
     box.appendChild(card);
   }
 
-  // Concluído / Indo fazer / Cancelar hoje, para qualquer tarefa (repetida ou não)
+  // Remarcar UM dia de uma tarefa que se repete (ex.: repor a academia no sábado)
+  function remarcarDia(id, dia) {
+    const t = tarefas.find(x => x.id === id); if (!t) return;
+    let dlg = document.getElementById('dlg-remarcar');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'dlg-remarcar'; dlg.className = 'dlg-remarcar'; document.body.appendChild(dlg); }
+    const sug = somaDias(dia > hoje() ? dia : hoje(), 1);
+    dlg.innerHTML = `<form method="dialog">
+      <h3>📅 Remarcar ${esc(t.titulo)}</h3>
+      <p class="desc">Só o dia ${esc(nomeDia(dia).toLowerCase())} muda. Os outros dias continuam como estão.</p>
+      <div class="grade-campos">
+        <label class="campo"><span>Novo dia</span><input type="date" name="nd" value="${sug}" min="${hoje()}" required></label>
+        <label class="campo"><span>Horário</span><input type="time" name="nh" step="900" value="${hora5(t.hora) || ''}"></label>
+      </div>
+      <div class="dlg-acoes"><button type="button" class="btn-secundario" data-x>Cancelar</button><button type="submit" class="btn-primario">Remarcar ✦</button></div>
+    </form>`;
+    const f = dlg.querySelector('form');
+    dlg.querySelector('[data-x]').addEventListener('click', () => dlg.close());
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nd = f.nd.value, nh = f.nh.value || null; if (!nd) return f.nd.focus();
+      try {
+        const copia = await salvarTarefa(null, { titulo: t.titulo, categoria: t.categoria, duracao_min: t.duracao_min, data: nd, hora: nh, lembrete_min: t.lembrete_min, marca_id: t.marca_id || null, notas: `Reposição de ${fmtDia(dia)}` });
+        const oc = { ...(t.ocorrencias || {}) }; oc[dia] = `remarcada:${nd}:${copia.id}`;
+        await salvarTarefa(id, { ocorrencias: oc });
+        dlg.close(); desenhar(); toast(`${t.titulo} remarcada para ${nomeDia(nd).toLowerCase()} ✦`);
+      } catch (err) { console.error(err); toast('Não consegui remarcar agora.', true); }
+    });
+    dlg.showModal();
+  }
+
+  // Concluído / Executando / Cancelar hoje, para qualquer tarefa (repetida ou não)
   async function resolverDia(id, dia, estado, botao) {
     const t = tarefas.find(x => x.id === id); if (!t) return;
     try {
       if (t.repetir) {
         const oc = { ...(t.ocorrencias || {}) };
+        const antes = String(oc[dia] || '');
+        if (antes.startsWith('remarcada:')) {
+          const copia = antes.split(':')[2];
+          if (copia) { await sb.from('tarefas').delete().eq('id', copia); tarefas = tarefas.filter(x => x.id !== copia); }
+        }
         if (estado) oc[dia] = estado; else delete oc[dia];
         await salvarTarefa(id, { ocorrencias: oc });
       } else if (estado === 'feita') { if (!t.concluida) return concluir(id, botao); }
@@ -357,12 +393,18 @@
           <span>${durTxt(t.duracao_min)}${fator && Math.abs(fator - 1) > .15 && !t.concluida ? ` <em title="Pelo seu histórico">(costuma levar ${durTxt(duracaoReal(t, r))})</em>` : ''}</span>
           ${t.concluida && t.duracao_real_min ? `<span>levou ${durTxt(t.duracao_real_min)}</span>` : ''}</div>
       </div>
+      ${t._rep && t.concluida ? `<div class="crono-grupo"><button class="crono-btn" data-dia-estado="" data-id="${t.id}" data-dia="${t.data}" title="Voltar para pendente">↺ Desfazer</button>
+            <button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Não aconteceu neste dia">✕ Não fiz</button>
+            <button class="crono-btn" data-remarcar="${t.id}" data-dia="${t.data}" title="Repor em outro dia">📅 Remarcar</button></div>` : ''}
+      ${t._rep && !t.concluida && t.data !== hoje() ? `<div class="crono-grupo"><button class="crono-btn" data-remarcar="${t.id}" data-dia="${t.data}" title="Passar só este dia para outra data">📅 Remarcar</button></div>` : ''}
       ${t._rep && !t.concluida && t.data === hoje() ? (t._estado === 'fazendo'
         ? `<div class="crono-grupo"><span class="chip fazendo">▶ Fazendo agora</span>
             <button class="crono-btn fim" data-dia-estado="feita" data-id="${t.id}" data-dia="${t.data}">✓ Concluído</button></div>`
         : `<div class="crono-grupo"><button class="crono-btn" data-dia-estado="fazendo" data-id="${t.id}" data-dia="${t.data}">▶ Executando</button>
-            <button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Só hoje. Os outros dias continuam.">✕ Cancelar hoje</button></div>`) : ''}
-      ${!t._rep && !t.concluida && t.data === hoje() && !t.iniciada_em && !acumulado(t) ? `<button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Tirar de hoje">✕ Hoje não</button>` : ''}
+            <button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Só hoje. Os outros dias continuam.">✕ Cancelar hoje</button>
+            <button class="crono-btn" data-remarcar="${t.id}" data-dia="${t.data}" title="Repor em outro dia">📅 Remarcar</button></div>`) : ''}
+      ${!t._rep && !t.concluida && t.data === hoje() && !t.iniciada_em && !acumulado(t) ? `<button class="crono-btn" data-dia-estado="pulada" data-id="${t.id}" data-dia="${t.data}" title="Tirar de hoje">✕ Hoje não</button><button class="crono-btn" data-editar="${t.id}" title="Escolher outro dia">📅 Remarcar</button>` : ''}
+      ${!t._rep && t.concluida ? `<button class="crono-btn" data-concluir="${t.id}" title="Voltar para pendente">↺ Desfazer</button>` : ''}
       ${!t._rep && !t.concluida && t.data === hoje() ? (t.iniciada_em
         ? `<div class="crono-grupo"><span class="cronometro" data-desde="${t.iniciada_em}" data-acc="${acumulado(t)}">${durTxt(tempoTotal(t))}</span>
             <button class="crono-btn" data-pausar="${t.id}" title="Pausar" aria-label="Pausar">⏸</button>
@@ -387,7 +429,7 @@
         <h2>${maiuscula(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>
         <p class="desc">Toque no círculo para concluir. Use "Começar" para eu cronometrar e aprender quanto tempo você leva.</p>
         <div class="lista-tarefas">${doDia.map(t => itemTarefa(t, r)).join('') || `<p class="vazio">Nada reservado para hoje. Que tal reservar um horário para algo importante?</p>`}</div>
-        ${puladasDoDia(h).length ? `<p class="puladas">Cancelado só hoje: ${puladasDoDia(h).map(t => `<span>${esc(t.titulo)} <button class="link-mini" data-dia-estado="" data-id="${t.id}" data-dia="${h}">desfazer</button></span>`).join(' · ')}</p>` : ''}
+        ${puladasDoDia(h).length ? `<p class="puladas">Fora de hoje: ${puladasDoDia(h).map(t => { const r = String(t._estado).startsWith('remarcada:') ? String(t._estado).split(':')[1] : ''; return `<span>${esc(t.titulo)}${r ? ` <em>(remarcada para ${nomeDia(r).toLowerCase()})</em>` : ''} <button class="link-mini" data-dia-estado="" data-id="${t.id}" data-dia="${h}">desfazer</button></span>`; }).join(' · ')}</p>` : ''}
         <button class="add-coluna" data-nova-tarefa="${h}">+ Reservar horário hoje</button>
       </div>
       ${semDia.length ? `<div class="cartao"><h2>Sem horário ainda</h2><p class="desc">Ideias e pendências esperando um horário reservado.</p>
@@ -807,8 +849,9 @@
       </div>
       <div id="t-conteudo"><p class="carregando">Carregando suas tarefas...</p></div>`;
     raiz.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-dia-estado], [data-nova-tarefa], [data-concluir], [data-comecar], [data-pausar], [data-editar-tempo], [data-editar], [data-tvis], [data-plano], [data-reagendar-atrasadas], [data-equilibrar], [data-ics-semana], [data-notificar], [data-ajustar-rotina]');
+      const a = e.target.closest('[data-remarcar], [data-dia-estado], [data-nova-tarefa], [data-concluir], [data-comecar], [data-pausar], [data-editar-tempo], [data-editar], [data-tvis], [data-plano], [data-reagendar-atrasadas], [data-equilibrar], [data-ics-semana], [data-notificar], [data-ajustar-rotina]');
       if (!a) return;
+      if (a.matches('[data-remarcar]')) return remarcarDia(a.dataset.remarcar, a.dataset.dia);
       if (a.matches('[data-dia-estado]')) return resolverDia(a.dataset.id, a.dataset.dia, a.dataset.diaEstado || null, a);
       if (a.matches('[data-nova-tarefa]')) return abrirTarefa(null, a.dataset.novaTarefa || null);
       if (a.matches('[data-concluir]')) return concluir(a.dataset.concluir, a);
