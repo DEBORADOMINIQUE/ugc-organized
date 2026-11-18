@@ -180,3 +180,9 @@
 .qd-coluna.recolhida:hover { background: var(--branco); }
 .qd-vert { writing-mode: vertical-rl; font-family: var(--titulo); font-weight: 600; font-size: .95rem; color: var(--ameixa, #2e0b22); white-space: nowrap; }
 @media (max-width: 700px) { .qd-coluna { width: 82vw; } .qd-coluna.recolhida { width: 46px; } }
+
+/* Arrastar com o dedo */
+.qd-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.qd-fantasma { position: fixed; z-index: 9999; pointer-events: none; transform: rotate(3deg) scale(1.03); box-shadow: 0 18px 40px rgba(46,11,34,.3) !important; opacity: .95; margin: 0; }
+body.qd-arrastando-toque { overflow: hidden; }
+body.qd-arrastando-toque .qd-quadro { scroll-snap-type: none; }

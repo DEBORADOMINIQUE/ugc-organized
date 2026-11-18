@@ -205,10 +205,74 @@
         const id = arrastando; arrastando = null; if (id) soltar(id, col.dataset.cetapa, a ? a.dataset.cid : null);
       });
     });
+    ativarToque($('.qd-quadro'), alvo);
     const bus = $('[data-qdbusca]');
     bus.addEventListener('input', () => { filtro.busca = bus.value; const p = bus.selectionStart; desenharPlanner(); const n = $('[data-qdbusca]'); n.focus(); n.setSelectionRange(p, p); });
     $('[data-qdmarca]').addEventListener('change', (ev) => { filtro.marca = ev.target.value; desenharPlanner(); });
     $('[data-qdetq]').addEventListener('change', (ev) => { filtro.etiqueta = ev.target.value; desenharPlanner(); });
+  }
+
+  // ===== Arrastar com o dedo (celular): segura o cartão um instante e arrasta, como no app do Trello =====
+  let ignorarClique = false;
+  function ativarToque(quadro, alvo) {
+    if (!quadro) return;
+    let t = null;
+    const limpar = () => {
+      if (!t) return;
+      clearTimeout(t.timer); cancelAnimationFrame(t.raf);
+      if (t.ghost && t.ghost.parentNode) t.ghost.parentNode.removeChild(t.ghost);
+      if (t.el) t.el.classList.remove('arrastando');
+      $$('.coluna').forEach(k => k.classList.remove('sobre')); $$('.qd-antes').forEach(k => k.classList.remove('qd-antes'));
+      document.body.classList.remove('qd-arrastando-toque');
+      t = null;
+    };
+    const colunaEm = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest('.coluna[data-cetapa]'); };
+    // Rola o quadro sozinho quando o dedo chega perto das beiradas
+    const rolar = () => {
+      if (!t || !t.ativo) return;
+      const w = window.innerWidth, h = window.innerHeight, borda = 48;
+      if (t.x < borda) quadro.scrollLeft -= 12; else if (t.x > w - borda) quadro.scrollLeft += 12;
+      const col = colunaEm(t.x, t.y), cards = col && col.querySelector('.cards');
+      if (cards) { const r = cards.getBoundingClientRect(); if (t.y < r.top + 40) cards.scrollTop -= 8; else if (t.y > r.bottom - 40) cards.scrollTop += 8; }
+      if (t.y < 60) window.scrollBy(0, -10); else if (t.y > h - 60) window.scrollBy(0, 10);
+      t.raf = requestAnimationFrame(rolar);
+    };
+    const pegar = () => {
+      const r = t.el.getBoundingClientRect();
+      t.ativo = true; t.dx = t.x - r.left; t.dy = t.y - r.top;
+      t.ghost = t.el.cloneNode(true); t.ghost.classList.add('qd-fantasma'); t.ghost.style.width = r.width + 'px';
+      t.ghost.style.left = r.left + 'px'; t.ghost.style.top = r.top + 'px';
+      document.body.appendChild(t.ghost); t.el.classList.add('arrastando'); document.body.classList.add('qd-arrastando-toque');
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
+      t.raf = requestAnimationFrame(rolar);
+    };
+    quadro.addEventListener('touchstart', (ev) => {
+      const el = ev.target.closest('.card-marca[data-cid]'); if (!el || ev.target.closest('button, a') || ev.touches.length > 1) return;
+      const p = ev.touches[0];
+      t = { id: el.dataset.cid, el, x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, ativo: false };
+      t.timer = setTimeout(pegar, 350);
+    }, { passive: true });
+    quadro.addEventListener('touchmove', (ev) => {
+      if (!t) return;
+      const p = ev.touches[0]; t.x = p.clientX; t.y = p.clientY;
+      if (!t.ativo) { if (Math.abs(t.x - t.x0) > 8 || Math.abs(t.y - t.y0) > 8) limpar(); return; } // estava só rolando
+      ev.preventDefault();
+      t.ghost.style.left = (t.x - t.dx) + 'px'; t.ghost.style.top = (t.y - t.dy) + 'px';
+      $$('.coluna').forEach(k => k.classList.remove('sobre')); $$('.qd-antes').forEach(k => k.classList.remove('qd-antes'));
+      const col = colunaEm(t.x, t.y);
+      if (col) { col.classList.add('sobre'); const a = alvo(col, t.y); if (a && a !== t.el) a.classList.add('qd-antes'); }
+    }, { passive: false });
+    const fim = () => {
+      if (!t) return;
+      if (!t.ativo) { limpar(); return; }
+      const col = colunaEm(t.x, t.y), id = t.id, a = col && alvo(col, t.y);
+      ignorarClique = true; setTimeout(() => { ignorarClique = false; }, 400);
+      limpar();
+      if (col) soltar(id, col.dataset.cetapa, a && a.dataset.cid !== id ? a.dataset.cid : null);
+    };
+    quadro.addEventListener('touchend', fim);
+    quadro.addEventListener('touchcancel', limpar);
+    quadro.addEventListener('contextmenu', (ev) => { if (ev.target.closest('.card-marca[data-cid]')) ev.preventDefault(); });
   }
 
   function desenharCalendario() {
@@ -363,6 +427,7 @@
       <div class="marcas-ferramentas"><div class="visoes"><button class="vis-btn ativo" data-cvis="planner">Quadro</button><button class="vis-btn" data-cvis="roteiros">Roteiros</button></div><button class="btn-secundario ver-agenda" data-ver-agenda="post">📅 Ver na Agenda</button></div>
       <div id="c-visao"><p class="carregando">Carregando seus conteúdos...</p></div>`;
     raiz.addEventListener('click', (e) => {
+      if (ignorarClique) return;
       const rc = e.target.closest('[data-qdrecolher]'); if (rc) return alternarColuna(rc.dataset.qdrecolher);
       if (e.target.closest('[data-qdlimpar]')) { filtro.busca = ''; filtro.marca = ''; filtro.etiqueta = ''; return desenharPlanner(); }
       const ab = e.target.closest('[data-qdabrir]');
