@@ -964,6 +964,8 @@
       if (raiz) desenhar();
       return salvo;
     },
+    // Busca de novo no banco (ao clicar na aba), sem remontar a tela
+    async recarregar() { if (!sb) return; try { await carregar(); if (document.querySelector('dialog[open]')) return; desenhar(); } catch (e) { console.error(e); } },
     async iniciar(cliente, secao) {
       sb = cliente; raiz = secao;
       montarEsqueleto();

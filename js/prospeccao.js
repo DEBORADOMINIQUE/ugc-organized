@@ -476,6 +476,7 @@
       }
     },
     aoAbrir() { desenhar(); },
+    async recarregar() { if (!carregado) return; try { [lista, textos] = await Promise.all([buscarTudo('prospeccoes', 'data_abordagem'), buscarTudo('abordagens', 'created_at')]); if (document.querySelector('dialog[open]')) return; desenhar(); } catch (e) { console.error(e); } },
     // Usada pelas Sugestões: abordagens que estão na hora da repescagem (sem resposta depois de 2 follow-ups, ou "agora não")
     repescagens() {
       const h = hoje();

@@ -26,12 +26,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script src="js/auth.js?v=5"></script>
   <script src="js/campos.js?v=1"></script>
-  <script src="js/marcas.js?v=15"></script>
-  <script src="js/tarefas.js?v=14"></script>
-  <script src="js/prospeccao.js?v=12"></script>
-  <script src="js/financeiro.js?v=8"></script>
+  <script src="js/marcas.js?v=15r"></script>
+  <script src="js/tarefas.js?v=15"></script>
+  <script src="js/prospeccao.js?v=13"></script>
+  <script src="js/financeiro.js?v=8r"></script>
   <script src="js/simulador.js?v=9"></script>
-  <script src="js/conteudo.js?v=10"></script>
+  <script src="js/conteudo.js?v=11"></script>
   <script src="js/assistente.js?v=5"></script>
   <script src="js/crescimento.js?v=4"></script>
   <script src="js/primeiros.js?v=3"></script>
@@ -43,7 +43,7 @@
   <script src="js/sugestoes.js?v=3"></script>
   <script src="js/agenda.js?v=8"></script>
   <script src="js/tema.js?v=4"></script>
-  <link rel="stylesheet" href="css/conteudo.css?v=10">
+  <link rel="stylesheet" href="css/conteudo.css?v=11">
   <link rel="stylesheet" href="css/financeiro.css?v=7">
   <link rel="stylesheet" href="css/prospeccao.css?v=3">
   <link rel="stylesheet" href="css/tarefas.css?v=8">
@@ -697,16 +697,39 @@
         $('titulo-topo').textContent = botao.dataset.titulo;
         $('periodos').style.display = !temSite || !['aba-principal', 'aba-portfolio'].includes(botao.dataset.tab) ? 'none' : ''; // período só vale para os números do site
         document.body.classList.remove('menu-aberto');
-        if (botao.dataset.tab === 'aba-tarefas') Tarefas.aoAbrir();
-        if (botao.dataset.tab === 'aba-prospeccao') Prospeccao.aoAbrir();
-        if (botao.dataset.tab === 'aba-financeiro') Financeiro.aoAbrir();
-        if (botao.dataset.tab === 'aba-simulador') Simulador.aoAbrir();
-        if (botao.dataset.tab === 'aba-conteudo') Conteudo.aoAbrir();
-        if (botao.dataset.tab === 'aba-principal') { Crescimento.desenhar(); PrimeirosPassos.desenhar(); Sugestoes.desenhar(); }
-        if (botao.dataset.tab === 'aba-comparativo') Comparativo.aoAbrir();
-        if (botao.dataset.tab === 'aba-agenda') Agenda.aoAbrir();
+        desenharAba(botao.dataset.tab);
         window.scrollTo({ top: 0 });
+        // Busca os dados mais novos (o que mudou no celular ou em outra aba aparece aqui)
+        atualizarDados().then(() => { if (botao.classList.contains('ativa')) desenharAba(botao.dataset.tab); });
     }
+    function desenharAba(tab) {
+        if (tab === 'aba-tarefas') Tarefas.aoAbrir();
+        if (tab === 'aba-prospeccao') Prospeccao.aoAbrir();
+        if (tab === 'aba-financeiro') Financeiro.aoAbrir();
+        if (tab === 'aba-simulador') Simulador.aoAbrir();
+        if (tab === 'aba-conteudo') Conteudo.aoAbrir();
+        if (tab === 'aba-principal') { Crescimento.desenhar(); PrimeirosPassos.desenhar(); Sugestoes.desenhar(); }
+        if (tab === 'aba-comparativo') Comparativo.aoAbrir();
+        if (tab === 'aba-agenda') Agenda.aoAbrir();
+    }
+    let ultimaAtualizacao = Date.now(), atualizando = null;
+    function atualizarDados(forcar) {
+        if (atualizando) return atualizando;
+        if (!forcar && Date.now() - ultimaAtualizacao < 3000) return Promise.resolve();
+        ultimaAtualizacao = Date.now();
+        const mods = [window.Marcas, window.Tarefas, window.Prospeccao, window.Financeiro, window.Conteudo];
+        atualizando = Promise.all(mods.map(m => (m && m.recarregar ? m.recarregar() : null))).finally(() => { atualizando = null; });
+        return atualizando;
+    }
+    // Voltou para o app depois de um tempo (outra aba, celular desbloqueado): atualiza sozinho
+    let saiuEm = 0;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { saiuEm = Date.now(); return; }
+        if (saiuEm && Date.now() - saiuEm > 30000) {
+            const ativa = document.querySelector('.aba.ativa');
+            atualizarDados(true).then(() => { if (ativa) desenharAba(ativa.dataset.tab); });
+        }
+    });
     document.querySelectorAll('.aba').forEach(botao => botao.addEventListener('click', () => irPara(botao)));
 
     document.querySelectorAll('.periodo').forEach(botao => {

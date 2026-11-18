@@ -892,6 +892,7 @@
     },
     // Chamado quando a aba é aberta: na primeira vez, pergunta a rotina
     aoAbrir() { if (carregado) desenhar(); },
+    async recarregar() { if (!carregado) return; try { await carregar(); atualizarSelo(); if (document.querySelector('dialog[open]')) return; if (prefs && raiz.classList.contains('ativo')) desenhar(); } catch (e) { console.error(e); } },
     nome: nomeDela,
     prefs: () => ({ ...PREFS_PADRAO, ...dadosBrutos }),
     // Guarda só alguns campos (ex.: meta de abordagens), sem apagar o resto nem pular as boas-vindas

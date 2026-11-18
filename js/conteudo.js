@@ -475,6 +475,17 @@
       }
     },
     aoAbrir() { desenhar(); },
+    async recarregar() {
+      if (!carregado) return;
+      try {
+        let tudo = [], ini = 0;
+        while (true) {
+          const { data, error } = await sb.from('conteudos').select('*').order('created_at', { ascending: false }).range(ini, ini + 999);
+          if (error) throw error; tudo = tudo.concat(data || []); if (!data || data.length < 1000) break; ini += 1000;
+        }
+        itens = tudo; if (document.querySelector('dialog[open]')) return; desenhar();
+      } catch (e) { console.error(e); }
+    },
     lista: () => itens,
     // Usada pelo Assistente: abre "nova ideia" já preenchida
     abrir(id) { const c = itens.find(x => x.id === id); if (c) abrirFicha(c); },

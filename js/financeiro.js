@@ -411,6 +411,17 @@
       }
     },
     aoAbrir() { desenhar(); },
+    async recarregar() {
+      if (!carregado) return;
+      try {
+        let tudo = [], ini = 0;
+        while (true) {
+          const { data, error } = await sb.from('despesas').select('*').order('data', { ascending: false }).range(ini, ini + 999);
+          if (error) throw error; tudo = tudo.concat(data || []); if (!data || data.length < 1000) break; ini += 1000;
+        }
+        lanc = tudo; if (document.querySelector('dialog[open]')) return; desenhar();
+      } catch (e) { console.error(e); }
+    },
     // Usada pelo Crescimento e pelo Comparativo: saídas do TRABALHO entre duas datas
     gastosEntre(ini, fim) {
       return lanc.filter(d => tipoDe(d) === 'saida' && (d.escopo || 'trabalho') === 'trabalho').reduce((s, d) => s + noPeriodo(d, ini, fim).length * Number(d.valor), 0);
