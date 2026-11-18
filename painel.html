@@ -31,8 +31,8 @@
   <script src="js/prospeccao.js?v=13"></script>
   <script src="js/financeiro.js?v=8r"></script>
   <script src="js/simulador.js?v=9"></script>
-  <script src="js/conteudo.js?v=12"></script>
-  <script src="js/assistente.js?v=5"></script>
+  <script src="js/conteudo.js?v=15"></script>
+  <script src="js/assistente.js?v=6"></script>
   <script src="js/crescimento.js?v=4"></script>
   <script src="js/primeiros.js?v=3"></script>
   <script src="js/comparativo.js?v=3"></script>
@@ -43,7 +43,7 @@
   <script src="js/sugestoes.js?v=3"></script>
   <script src="js/agenda.js?v=8"></script>
   <script src="js/tema.js?v=4"></script>
-  <link rel="stylesheet" href="css/conteudo.css?v=12">
+  <link rel="stylesheet" href="css/conteudo.css?v=16">
   <link rel="stylesheet" href="css/financeiro.css?v=7">
   <link rel="stylesheet" href="css/prospeccao.css?v=3">
   <link rel="stylesheet" href="css/tarefas.css?v=8">
@@ -699,8 +699,30 @@
         document.body.classList.remove('menu-aberto');
         desenharAba(botao.dataset.tab);
         window.scrollTo({ top: 0 });
+        // Saiu versão nova do app? Recarrega sozinho, já nesta aba
+        verificarVersao(botao.dataset.tab);
         // Busca os dados mais novos (o que mudou no celular ou em outra aba aparece aqui)
         atualizarDados().then(() => { if (botao.classList.contains('ativa')) desenharAba(botao.dataset.tab); });
+    }
+    // Compara as versões dos arquivos desta página com as da página publicada agora
+    const versoes = (html) => (html.match(/\.(?:js|css)\?v=[^"']+/g) || []).sort().join('|');
+    let minhaVersao = '';
+    fetch(location.pathname + '?nv=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { minhaVersao = versoes(t); }).catch(() => {});
+    let ultimaVerificacao = Date.now();
+    async function verificarVersao(tab) {
+        if (Date.now() - ultimaVerificacao < 20000) return;
+        ultimaVerificacao = Date.now();
+        try {
+            const r = await fetch(location.pathname + '?nv=' + Date.now(), { cache: 'no-store' });
+            if (!r.ok) return;
+            const nova = versoes(await r.text());
+            let ultimoReload = 0; try { ultimoReload = Number(sessionStorage.getItem('oug_reload') || 0); } catch (e) {}
+            if (nova && minhaVersao && nova !== minhaVersao && !document.querySelector('dialog[open]') && Date.now() - ultimoReload > 60000) {
+                try { sessionStorage.setItem('oug_reload', String(Date.now())); } catch (e) {}
+                location.hash = String(tab || '').replace('aba-', '');
+                location.reload();
+            }
+        } catch (e) { /* sem internet: segue com a versão atual */ }
     }
     function desenharAba(tab) {
         if (tab === 'aba-tarefas') Tarefas.aoAbrir();
@@ -727,6 +749,7 @@
         if (document.hidden) { saiuEm = Date.now(); return; }
         if (saiuEm && Date.now() - saiuEm > 30000) {
             const ativa = document.querySelector('.aba.ativa');
+            if (ativa) verificarVersao(ativa.dataset.tab);
             atualizarDados(true).then(() => { if (ativa) desenharAba(ativa.dataset.tab); });
         }
     });

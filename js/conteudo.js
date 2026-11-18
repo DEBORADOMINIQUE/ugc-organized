@@ -7,18 +7,37 @@
    Tabela: conteudos (conteudo.sql + conteudo-quadro.sql).
    ========================================================= */
 (function () {
-  const ETAPAS = [
-    { id: 'ideia', nome: 'Ideias', emoji: '💡', dica: 'Tudo que pode virar conteúdo' },
-    { id: 'briefing', nome: 'Aguardando briefing', emoji: '📋', dica: 'Esperando a marca mandar o briefing' },
-    { id: 'produto', nome: 'Aguardando produto', emoji: '📦', dica: 'Esperando o produto chegar' },
-    { id: 'roteiro', nome: 'Roteiro', emoji: '✍️', dica: 'Gancho, falas e chamada' },
-    { id: 'aprovacao', nome: 'Aprovação da marca', emoji: '📨', dica: 'Esperando a marca aprovar' },
-    { id: 'gravar', nome: 'Gravar', emoji: '🎥', dica: 'Pronto para gravar' },
-    { id: 'editar', nome: 'Editar', emoji: '✂️', dica: 'Corte, legenda e música' },
-    { id: 'ajustes', nome: 'Ajustes', emoji: '🔁', dica: 'A marca pediu alterações' },
-    { id: 'agendado', nome: 'Pronto / agendado', emoji: '📅', dica: 'Esperando a data' },
-    { id: 'postado', nome: 'Entregue / postado', emoji: '✓', dica: 'Concluído' }
+  // Colunas padrão do quadro. Cada pessoa pode editar (nome, emoji, ordem, novas colunas).
+  // A última ("postado") é sempre a de concluído: dá para renomear, mas não apagar.
+  const COLUNAS_PADRAO = [
+    { id: 'briefing', nome: 'Briefing', emoji: '📋' },
+    { id: 'roteiro', nome: 'Roteiro', emoji: '✍️' },
+    { id: 'gravar', nome: 'Gravação', emoji: '🎥' },
+    { id: 'gravado', nome: 'Gravado', emoji: '🎬' },
+    { id: 'envio', nome: 'Pronto para envio', emoji: '📤' },
+    { id: 'aprovado', nome: 'Aprovado', emoji: '✅' },
+    { id: 'postado', nome: 'Postado / enviado', emoji: '🚀' }
   ];
+  let ETAPAS = COLUNAS_PADRAO;
+  function lerColunas() {
+    const p = window.Tarefas && Tarefas.prefs ? Tarefas.prefs().quadro_colunas : null;
+    let l = Array.isArray(p) && p.length ? p.filter(c => c && c.id && c.nome) : COLUNAS_PADRAO;
+    if (!l.some(c => c.id === 'postado')) l = l.concat(COLUNAS_PADRAO[COLUNAS_PADRAO.length - 1]);
+    l = l.filter(c => c.id !== 'postado').concat(l.find(c => c.id === 'postado'));   // concluído sempre por último
+    ETAPAS = l;
+  }
+  // Cartões de etapas antigas (ou de colunas apagadas) aparecem numa coluna parecida
+  const LEGADO = { ideia: 'briefing', produto: 'briefing', aprovacao: 'envio', editar: 'gravado', ajustes: 'envio', agendado: 'aprovado' };
+  function colunaDe(c) {
+    const ids = ETAPAS.map(e => e.id);
+    if (ids.includes(c.etapa)) return c.etapa;
+    if (LEGADO[c.etapa] && ids.includes(LEGADO[c.etapa])) return LEGADO[c.etapa];
+    return ids[0];
+  }
+  // Qual parte do cartão importa em cada coluna (o resto continua na ficha, mais abaixo)
+  const SECAO_DA_COLUNA = { briefing: 'briefing', roteiro: 'roteiro', gravar: 'gravacao', gravado: 'entrega', envio: 'entrega', aprovado: 'entrega', postado: 'post' };
+  const nomeEtapa = (id) => (ETAPAS.find(e => e.id === id) || {}).nome || id;
+  const FINAL = () => ETAPAS[ETAPAS.length - 1];
   const ETIQUETAS = {
     urgente: { nome: 'Urgente', cor: '#ff4d6d' },
     pago: { nome: 'Pago', cor: '#7fc400' },
@@ -28,13 +47,58 @@
     organico: { nome: 'Orgânico', cor: '#f2b705' },
     produto: { nome: 'Esperando produto', cor: '#ff8a3d' }
   };
+  // ===== Anexos: imagens e PDFs no cartão (Supabase Storage, pasta de cada pessoa) =====
+  let uid = null;
+  const anx = (c) => (Array.isArray(c.anexos) ? c.anexos : []);
+  const urlCache = {};   // caminho -> { url, ate }
+  async function urlsAssinadas(caminhos) {
+    const agora = Date.now(), faltam = [...new Set(caminhos)].filter(p => p && !(urlCache[p] && urlCache[p].ate > agora));
+    if (faltam.length) {
+      const { data } = await sb.storage.from('anexos').createSignedUrls(faltam, 3600);
+      (data || []).forEach(d => { if (d.signedUrl) urlCache[d.path] = { url: d.signedUrl, ate: agora + 50 * 60000 }; });
+    }
+    return Object.fromEntries(caminhos.map(p => [p, urlCache[p] && urlCache[p].url]));
+  }
+  // Diminui a foto antes de mandar (mais rápido e ocupa menos espaço)
+  function comprimir(arquivo) {
+    return new Promise((ok) => {
+      if (!/^image\/(jpeg|png|webp|heic|heif)/i.test(arquivo.type)) return ok(arquivo);
+      const img = new Image(), url = URL.createObjectURL(arquivo);
+      img.onload = () => {
+        const max = 1800, k = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+        cv.toBlob(b => ok(b && b.size < arquivo.size ? new File([b], arquivo.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : arquivo), 'image/jpeg', 0.84);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); ok(arquivo); };
+      img.src = url;
+    });
+  }
+  async function enviarAnexos(arquivos, aoProgresso) {
+    if (!uid) { const { data } = await sb.auth.getUser(); uid = data && data.user && data.user.id; }
+    const lista = [...arquivos].filter(a => /^image\//.test(a.type) || a.type === 'application/pdf');
+    const feitos = [];
+    for (let i = 0; i < lista.length; i++) {
+      if (aoProgresso) aoProgresso(i + 1, lista.length);
+      const a = await comprimir(lista[i]);
+      if (a.size > 15 * 1024 * 1024) { toast(`${lista[i].name} é grande demais (máx. 15 MB).`, true); continue; }
+      const ext = (a.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const caminho = `${uid}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await sb.storage.from('anexos').upload(caminho, a, { contentType: a.type, upsert: false });
+      if (error) throw error;
+      feitos.push({ path: caminho, nome: lista[i].name, tipo: a.type });
+    }
+    return feitos;
+  }
+
+  // Cor do cartão, como um post-it
+  const CORES = { amarelo: '#fff3a3', rosa: '#ffd1e8', verde: '#d9f7a6', azul: '#cfe6ff', laranja: '#ffd8b8', lilas: '#e6d9ff' };
   // Checklist que já vem pronta em cada cartão novo (dá para editar)
   function checklistPadrao(paraMarca) {
     return (paraMarca
       ? ['Ler o briefing', 'Escrever o roteiro', 'Roteiro aprovado pela marca', 'Gravar', 'Editar', 'Enviar para aprovação', 'Vídeo aprovado', 'Entregar o arquivo final']
       : ['Escrever o roteiro', 'Gravar', 'Editar', 'Legenda e hashtags', 'Capa', 'Agendar ou postar']).map(t => ({ t, ok: false }));
   }
-  const NOME_ETAPA = Object.fromEntries(ETAPAS.map(e => [e.id, e.nome]));
   const PLATAFORMAS = { instagram: '📸 Instagram', tiktok: '🎵 TikTok', youtube: '▶️ YouTube', marca: '💼 Para a marca', outro: '✦ Outro' };
   const FORMATOS = { reels: 'Reels', carrossel: 'Carrossel', story: 'Story', foto: 'Foto', video_ugc: 'Vídeo UGC', live: 'Live', video_longo: 'Vídeo longo' };
   const STATUS_ROTEIRO = { rascunho: { nome: 'Rascunho', cor: 'neutro' }, enviado: { nome: 'Enviado à marca', cor: 'alerta' }, ajustes: { nome: 'Pediram ajustes', cor: 'atraso' }, aprovado: { nome: 'Aprovado', cor: 'ok' } };
@@ -48,7 +112,7 @@
   const alternarColuna = (id) => { recolhidas = recolhidas.includes(id) ? recolhidas.filter(x => x !== id) : recolhidas.concat(id); try { localStorage.setItem('oug_qd_recolhidas', JSON.stringify(recolhidas)); } catch (e) {} desenharPlanner(); };
   // O que a marca ainda vai mandar (lista do acordo nas Marcas)
   const aReceber = (marcaId) => { const m = marcaId && marcas().find(x => x.id === marcaId); return m && Array.isArray(m.acordo) ? m.acordo.filter(x => x.envio && !x.recebido) : []; };
-  const faltaSQL = (e) => /checklist|etiquetas|posicao|link_arquivo|etapa_check|aprovacao|ajustes|briefing|23514|PGRST204/i.test((e && (e.message + ' ' + e.code)) || '');
+  const faltaSQL = (e) => /checklist|etiquetas|posicao|link_arquivo|etapa_check|aprovacao|ajustes|briefing|gravado|envio|aprovado|'cor'|column "cor"|link_briefing|link_post|'briefing'|anexos|23514|PGRST204/i.test((e && (e.message + ' ' + e.code)) || '');
   mesCal.setDate(1);
 
   const $ = (s, el) => (el || raiz).querySelector(s);
@@ -97,14 +161,14 @@
       const extra = etapa === 'aprovacao' && temRoteiro(c) && (!c.roteiro_status || c.roteiro_status === 'rascunho') ? { roteiro_status: 'enviado' } : {};
       if (c.etapa === 'produto' && etqs(c).includes('produto')) extra.etiquetas = etqs(c).filter(k => k !== 'produto');
       await salvar(id, { etapa, ...extra }); desenhar();
-      toast(etapa === 'postado' ? `${c.titulo}: no ar! ${G.t('Arrasou', 'Mandou bem')}, ${G.apelido()} ✦` : `${c.titulo} foi para "${NOME_ETAPA[etapa]}"`);
+      toast(etapa === 'postado' ? `${c.titulo}: concluído! ${G.t('Arrasou', 'Mandou bem')}, ${G.apelido()} ✦` : `${c.titulo} foi para "${nomeEtapa(etapa)}"`);
       if (etapa === 'gravar' && window.Tarefas && confirm('Quer reservar um horário para gravar?')) Tarefas.novaCom({ titulo: `Gravar: ${c.titulo}`, categoria: 'gravar', marca_id: c.marca_id });
     } catch (e) { console.error(e); toast(faltaSQL(e) ? 'Falta ativar o quadro novo: rode o conteudo-quadro.sql no Supabase.' : 'Não consegui mover agora.', true); }
   }
 
   // Ordem dos cartões dentro da coluna (como no Trello)
   const ordenar = (lista) => lista.slice().sort((a, b) => (a.posicao ?? 1e9) - (b.posicao ?? 1e9) || (a.data_publicacao || '9999').localeCompare(b.data_publicacao || '9999') || String(a.created_at || '').localeCompare(String(b.created_at || '')));
-  const daColuna = (etapa) => ordenar(itens.filter(c => c.etapa === etapa));
+  const daColuna = (etapa) => ordenar(itens.filter(c => colunaDe(c) === etapa));
   async function soltar(id, etapa, antesDe) {
     const c = itens.find(x => x.id === id); if (!c) return;
     const lista = daColuna(etapa).filter(x => x.id !== id);
@@ -126,33 +190,40 @@
   // ===== Desenho =====
   function desenhar() {
     if (!carregado) return;
+    lerColunas();
     const h = hoje(), semana = somaDias(h, 6);
     const daSemana = itens.filter(c => c.data_publicacao && c.data_publicacao >= h && c.data_publicacao <= semana);
-    const aguardando = itens.filter(c => c.etapa === 'aprovacao' || (c.roteiro_status === 'enviado' && c.etapa !== 'postado'));
+    const emProducao = itens.filter(c => c.etapa !== 'postado');
     const atrasados = itens.filter(c => c.data_publicacao && c.data_publicacao < h && c.etapa !== 'postado');
     const postadosMes = itens.filter(c => c.etapa === 'postado' && c.data_publicacao && c.data_publicacao.slice(0, 7) === h.slice(0, 7));
     $('#c-numeros').innerHTML = `
-      <div class="cartao numero destaque"><div class="rotulo">Para os próximos 7 dias</div><div class="valor">${daSemana.length}</div><div class="extra">${daSemana.filter(c => c.etapa === 'agendado' || c.etapa === 'postado').length} já prontos</div></div>
-      <div class="cartao numero"><div class="rotulo">Postados no mês</div><div class="valor">${postadosMes.length}</div><div class="extra">conteúdos no ar</div></div>
-      <div class="cartao numero"><div class="rotulo">Com a marca</div><div class="valor">${aguardando.length}</div><div class="extra">esperando aprovação</div></div>
-      <div class="cartao numero"><div class="rotulo">Banco de ideias</div><div class="valor">${itens.filter(c => c.etapa === 'ideia').length}</div><div class="extra">${atrasados.length ? `⚠ ${atrasados.length} com data passada` : 'nada atrasado ✦'}</div></div>`;
+      <div class="cartao numero destaque"><div class="rotulo">Para os próximos 7 dias</div><div class="valor">${daSemana.length}</div><div class="extra">${daSemana.filter(c => ETAPAS.findIndex(e => e.id === colunaDe(c)) >= ETAPAS.length - 2).length} já prontos</div></div>
+      <div class="cartao numero"><div class="rotulo">${esc(FINAL().nome)} no mês</div><div class="valor">${postadosMes.length}</div><div class="extra">conteúdos concluídos</div></div>
+      <div class="cartao numero"><div class="rotulo">Em produção</div><div class="valor">${emProducao.length}</div><div class="extra">cartões no quadro</div></div>
+      <div class="cartao numero"><div class="rotulo">Atrasados</div><div class="valor">${atrasados.length}</div><div class="extra">${atrasados.length ? 'prazo já passou' : 'nada atrasado ✦'}</div></div>`;
     $$('.vis-btn', raiz).forEach(b => b.classList.toggle('ativo', b.dataset.cvis === visao));
     if (visao === 'planner') desenharPlanner(); else if (visao === 'calendario') desenharCalendario(); else desenharRoteiros();
   }
 
   function cartao(c) {
-    const i = ETAPAS.findIndex(e => e.id === c.etapa), prox = ETAPAS[i + 1];
+    const i = ETAPAS.findIndex(e => e.id === colunaDe(c)), prox = ETAPAS[i + 1];
     const marca = c.marca_id && nomeMarca(c.marca_id), h = hoje(), feito = c.etapa === 'postado';
     const d = c.data_publicacao, classeData = !d ? '' : feito ? 'ok' : d < h ? 'atraso' : d <= somaDias(h, 2) ? 'alerta' : '';
     const lista = chk(c), ok = lista.filter(x => x.ok).length;
-    return `<article class="card-marca qd-card" draggable="true" data-cid="${c.id}" tabindex="0">
+    const capa = anx(c).find(a => /^image\//.test(a.tipo));
+    return `<article class="card-marca qd-card ${CORES[c.cor] ? 'postit' : ''}" ${CORES[c.cor] ? `style="--postit:${CORES[c.cor]}"` : ''} draggable="true" data-cid="${c.id}" tabindex="0">
+      ${capa ? `<div class="qd-capa"><img data-capa="${esc(capa.path)}" alt="" loading="lazy"></div>` : ''}
       ${etqs(c).length ? `<div class="qd-etqs">${etqs(c).filter(k => ETIQUETAS[k]).map(k => `<span style="background:${ETIQUETAS[k].cor}" title="${ETIQUETAS[k].nome}">${ETIQUETAS[k].nome}</span>`).join('')}</div>` : ''}
       <div class="qd-titulo">${esc(c.titulo)}</div>
+      ${(() => { const sc = SECAO_DA_COLUNA[colunaDe(c)]; const tx = sc === 'briefing' ? c.briefing : sc === 'roteiro' ? (c.gancho || c.desenvolvimento) : sc === 'gravacao' ? c.notas : sc === 'post' ? c.legenda : ''; return tx ? `<div class="qd-previa">${esc(String(tx).slice(0, 120))}</div>` : ''; })()}
       <div class="qd-badges">
         ${d ? `<span class="qd-badge ${classeData}" title="${feito ? 'Concluído' : 'Prazo'}">🕒 ${d === h ? 'hoje' : fmtCurta(d)}</span>` : ''}
         ${lista.length ? `<span class="qd-badge ${ok === lista.length ? 'ok' : ''}" title="Checklist">☑ ${ok}/${lista.length}</span>` : ''}
         ${c.roteiro_status ? `<span class="qd-badge ${c.roteiro_status === 'aprovado' ? 'ok' : c.roteiro_status === 'ajustes' ? 'atraso' : ''}" title="Roteiro: ${STATUS_ROTEIRO[c.roteiro_status].nome}">✍️ ${STATUS_ROTEIRO[c.roteiro_status].nome}</span>` : temRoteiro(c) ? '<span class="qd-badge" title="Tem roteiro">✍️</span>' : ''}
         ${c.link_arquivo ? '<span class="qd-badge" title="Arquivo final anexado">📎</span>' : ''}
+        ${anx(c).length ? `<span class="qd-badge" title="Anexos">🖼 ${anx(c).length}</span>` : ''}
+        ${c.briefing || c.link_briefing ? '<span class="qd-badge" title="Tem briefing">📋</span>' : ''}
+        ${c.link_post ? '<span class="qd-badge ok" title="Post publicado">🔗</span>' : ''}
         ${aReceber(c.marca_id).length && c.etapa !== 'postado' ? `<span class="qd-badge alerta" title="${esc(aReceber(c.marca_id).map(x => x.item).join(', '))}">📦 ${aReceber(c.marca_id).length} a receber</span>` : ''}
         <span class="qd-badge fmt">${esc(FORMATOS[c.formato] || c.formato)}</span>
       </div>
@@ -172,15 +243,16 @@
         <select data-qdmarca><option value="">Todos os conteúdos</option><option value="meu" ${filtro.marca === 'meu' ? 'selected' : ''}>🌸 Só os meus</option>${ms.map(m => `<option value="${m.id}" ${filtro.marca === m.id ? 'selected' : ''}>💼 ${esc(m.nome)}</option>`).join('')}</select>
         <select data-qdetq><option value="">Todas as etiquetas</option>${Object.entries(ETIQUETAS).map(([k, v]) => `<option value="${k}" ${filtro.etiqueta === k ? 'selected' : ''}>${v.nome}</option>`).join('')}</select>
         ${ativo ? '<button class="link-precos" data-qdlimpar>Limpar filtros</button>' : ''}
+        <button class="btn-secundario qd-editar-col" data-qdcolunas>⚙️ Editar colunas</button>
       </div>
       <div class="funil qd-quadro">${ETAPAS.map(e => {
       const todos = daColuna(e.id), lista = todos.filter(visivel);
-      if (recolhidas.includes(e.id)) return `<section class="coluna qd-coluna recolhida" data-cetapa="${e.id}" data-qdrecolher="${e.id}" title="Abrir ${e.nome}"><span class="qd-vert">${e.emoji} ${e.nome} · ${todos.length}</span></section>`;
-      return `<section class="coluna qd-coluna" data-cetapa="${e.id}"><header><div><h3>${e.emoji} ${e.nome} <span class="qtd">${todos.length}</span></h3><small>${e.dica}</small></div><button class="qd-recolher" data-qdrecolher="${e.id}" title="Recolher coluna" aria-label="Recolher ${e.nome}">‹</button></header>
+      if (recolhidas.includes(e.id)) return `<section class="coluna qd-coluna recolhida" data-cetapa="${e.id}" data-qdrecolher="${e.id}" title="Abrir ${esc(e.nome)}"><span class="qd-vert">${esc(e.emoji || '')} ${esc(e.nome)} · ${todos.length}</span></section>`;
+      return `<section class="coluna qd-coluna" data-cetapa="${e.id}"><header><div><h3>${esc(e.emoji || '')} ${esc(e.nome)} <span class="qtd">${todos.length}</span></h3>${e.dica ? `<small>${esc(e.dica)}</small>` : ''}</div><button class="qd-recolher" data-qdrecolher="${e.id}" title="Recolher coluna" aria-label="Recolher ${esc(e.nome)}">‹</button></header>
         <div class="cards">${lista.slice(0, e.id === 'postado' ? 15 : 200).map(cartao).join('') || `<p class="coluna-vazia">${ativo ? 'Nada com esse filtro' : 'Arraste para cá'}</p>`}</div>
         ${e.id === 'postado' && lista.length > 15 ? `<p class="qd-mais">+ ${lista.length - 15} concluídos</p>` : ''}
         <div class="qd-add" data-qdadd="${e.id}"><button class="add-coluna" data-qdabrir>+ Adicionar cartão</button></div></section>`;
-    }).join('')}</div>`;
+    }).join('')}<section class="qd-nova-col" id="qd-nova-col"><button class="add-coluna" data-qdnovacol>+ Adicionar outra coluna</button></section></div>`;
     $$('.card-marca[data-cid]').forEach(el => {
       el.addEventListener('dragstart', (ev) => { arrastando = el.dataset.cid; el.classList.add('arrastando'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', arrastando); });
       el.addEventListener('dragend', () => { el.classList.remove('arrastando'); $$('.coluna').forEach(k => k.classList.remove('sobre')); $$('.qd-antes').forEach(k => k.classList.remove('qd-antes')); });
@@ -200,10 +272,75 @@
       });
     });
     ativarToque($('.qd-quadro'), alvo);
+    // Capas dos cartões (links temporários e seguros, só a dona vê)
+    const imgs = $$('img[data-capa]');
+    if (imgs.length) urlsAssinadas(imgs.map(i => i.dataset.capa)).then(u => imgs.forEach(i => { if (u[i.dataset.capa]) i.src = u[i.dataset.capa]; else i.closest('.qd-capa').remove(); })).catch(() => {});
     const bus = $('[data-qdbusca]');
     bus.addEventListener('input', () => { filtro.busca = bus.value; const p = bus.selectionStart; desenharPlanner(); const n = $('[data-qdbusca]'); n.focus(); n.setSelectionRange(p, p); });
     $('[data-qdmarca]').addEventListener('change', (ev) => { filtro.marca = ev.target.value; desenharPlanner(); });
     $('[data-qdetq]').addEventListener('change', (ev) => { filtro.etiqueta = ev.target.value; desenharPlanner(); });
+  }
+
+  // ===== Editar colunas (nome, emoji, ordem, novas, apagar) =====
+  function editarColunas() {
+    lerColunas();
+    let cols = ETAPAS.map(e => ({ ...e }));
+    let dlg = document.getElementById('dlg-colunas');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'dlg-colunas'; dlg.className = 'dlg-remarcar dlg-colunas'; document.body.appendChild(dlg); }
+    const desenhar_ = () => {
+      dlg.innerHTML = `<form method="dialog">
+        <h3>⚙️ Colunas do seu quadro</h3>
+        <p class="desc">Monte do jeito que é o seu dia a dia. A última coluna é a de concluído (pode trocar o nome).</p>
+        <div class="col-lista">${cols.map((c, i) => `<div class="col-linha">
+          <input class="col-emoji" data-ce="${i}" value="${esc(c.emoji || '')}" maxlength="4" aria-label="Emoji">
+          <input class="col-nome" data-cn="${i}" value="${esc(c.nome)}" maxlength="40" aria-label="Nome da coluna">
+          ${c.id === 'postado' ? '<span class="col-fixa" title="Coluna de concluído">✓ final</span>' : `
+          <button type="button" class="qd-x" data-cs="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
+          <button type="button" class="qd-x" data-cd="${i}" ${i >= cols.length - 2 ? 'disabled' : ''} aria-label="Descer">↓</button>
+          <button type="button" class="qd-x" data-cx="${i}" aria-label="Apagar coluna">🗑</button>`}
+        </div>`).join('')}</div>
+        <button type="button" class="add-coluna" data-cadd>+ Nova coluna</button>
+        <div class="dlg-acoes"><button type="button" class="link-precos" data-cpadrao>Voltar ao padrão</button><span style="flex:1"></span><button type="button" class="btn-secundario" data-cfechar>Cancelar</button><button type="submit" class="btn-primario">Salvar ✦</button></div>
+      </form>`;
+    };
+    const lerCampos = () => {
+      dlg.querySelectorAll('[data-cn]').forEach(el => { cols[el.dataset.cn].nome = el.value.trim() || cols[el.dataset.cn].nome; });
+      dlg.querySelectorAll('[data-ce]').forEach(el => { cols[el.dataset.ce].emoji = el.value.trim(); });
+    };
+    desenhar_();
+    dlg.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cfechar !== undefined) return dlg.close();
+      if (b.type === 'submit') return;
+      lerCampos();
+      if (b.dataset.cs) { const i = +b.dataset.cs; [cols[i - 1], cols[i]] = [cols[i], cols[i - 1]]; }
+      if (b.dataset.cd) { const i = +b.dataset.cd; [cols[i + 1], cols[i]] = [cols[i], cols[i + 1]]; }
+      if (b.dataset.cx) {
+        const i = +b.dataset.cx, n = itens.filter(c => colunaDe(c) === cols[i].id).length;
+        if (n && !confirm(`A coluna "${cols[i].nome}" tem ${n} cartão(ões). Eles vão para a coluna anterior. Apagar?`)) return;
+        cols.splice(i, 1);
+      }
+      if (b.dataset.cadd !== undefined) { cols.splice(cols.length - 1, 0, { id: 'c' + Date.now().toString(36), nome: 'Nova coluna', emoji: '✦' }); }
+      if (b.dataset.cpadrao !== undefined) { if (!confirm('Voltar para as colunas padrão?')) return; cols = COLUNAS_PADRAO.map(e => ({ ...e })); }
+      desenhar_();
+      if (b.dataset.cadd !== undefined) { const ult = dlg.querySelectorAll('.col-nome'); const el = ult[ult.length - 2]; if (el) { el.focus(); el.select(); } }
+    };
+    dlg.onsubmit = async (e) => {
+      e.preventDefault(); lerCampos();
+      if (cols.length < 2) return toast('Deixe pelo menos duas colunas.', true);
+      const antigos = ETAPAS.map(x => x.id), novos = cols.map(x => x.id);
+      try {
+        // Cartões de colunas apagadas vão para a coluna anterior que continua existindo
+        for (const id of antigos.filter(x => !novos.includes(x))) {
+          const idx = antigos.indexOf(id); let dest = novos[0];
+          for (let k = idx - 1; k >= 0; k--) if (novos.includes(antigos[k])) { dest = antigos[k]; break; }
+          for (const c of itens.filter(x => colunaDe(x) === id)) await salvar(c.id, { etapa: dest });
+        }
+        await Tarefas.salvarPrefsParcial({ quadro_colunas: cols.map(({ id, nome, emoji }) => ({ id, nome, emoji })) });
+        dlg.close(); desenhar(); toast('Colunas salvas ✦');
+      } catch (err) { console.error(err); toast(faltaSQL(err) ? 'Falta ativar as colunas novas: rode o conteudo-colunas.sql no Supabase.' : 'Não consegui salvar as colunas.', true); }
+    };
+    dlg.showModal();
   }
 
   // ===== Arrastar com o dedo (celular): segura o cartão um instante e arrasta, como no app do Trello =====
@@ -302,35 +439,47 @@
   // ===== Ficha =====
   function abrirFicha(c, dados) {
     const nova = !c;
-    c = c || { etapa: 'ideia', plataforma: 'instagram', formato: 'reels', ...(dados || {}) };
+    lerColunas();
+    c = c || { etapa: ETAPAS[0].id, plataforma: 'instagram', formato: 'reels', ...(dados || {}) };
     const ativas = marcas().filter(m => !['perdida'].includes(m.etapa));
     const m = c.marca_id && marcas().find(x => x.id === c.marca_id);
     const dlg = document.getElementById('ficha-marca');
     dlg.innerHTML = `<form class="ficha" novalidate>
-      <header class="ficha-cab"><div><small>${nova ? 'Novo conteúdo' : esc(NOME_ETAPA[c.etapa])}</small><h2>${nova ? 'Qual é a ideia?' : esc(c.titulo)}</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+      <header class="ficha-cab"><div><small>${nova ? 'Novo conteúdo' : esc(nomeEtapa(colunaDe(c)))}</small><h2>${nova ? 'Qual é a ideia?' : esc(c.titulo)}</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
       <div class="ficha-corpo">
         <div class="faixa-erro" id="c-erro" hidden></div>
-        <fieldset><legend>Conteúdo</legend>
+        <fieldset data-sec="conteudo"><legend>Conteúdo</legend>
           <label class="campo largo"><span>Título / ideia *</span><input name="titulo" maxlength="140" value="${esc(c.titulo || '')}" placeholder="Ex.: 3 erros que eu cometia no skincare"></label>
           <div class="cat-escolha">${Object.entries(FORMATOS).map(([k, v]) => `<label><input type="radio" name="formato" value="${k}" ${c.formato === k ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div>
           <div class="grade-campos">
             <label class="campo"><span>Para quem?</span><select name="marca_id"><option value="">🌸 Meu conteúdo</option>${ativas.map(x => `<option value="${x.id}" ${c.marca_id === x.id ? 'selected' : ''}>💼 ${esc(x.nome)}</option>`).join('')}</select></label>
             <label class="campo"><span>Onde vai sair</span><select name="plataforma">${Object.entries(PLATAFORMAS).map(([k, v]) => `<option value="${k}" ${c.plataforma === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-            <label class="campo"><span>Etapa</span><select name="etapa">${ETAPAS.map(e => `<option value="${e.id}" ${c.etapa === e.id ? 'selected' : ''}>${e.emoji} ${e.nome}</option>`).join('')}</select></label>
+            <label class="campo"><span>Etapa</span><select name="etapa">${ETAPAS.map(e => `<option value="${e.id}" ${colunaDe(c) === e.id ? 'selected' : ''}>${esc(e.emoji || '')} ${esc(e.nome)}</option>`).join('')}</select></label>
             <label class="campo"><span>Prazo (entrega ou post)</span><input type="date" name="data_publicacao" value="${c.data_publicacao || ''}"></label>
           </div>
-          <label class="campo largo" style="margin-top:12px"><span>Link do arquivo final (Drive, WeTransfer...)</span><input name="link_arquivo" type="url" value="${esc(c.link_arquivo || '')}" placeholder="Cole aqui o link do vídeo pronto para a marca"></label>
         </fieldset>
-        <fieldset><legend>Etiquetas</legend>
+        <fieldset data-sec="briefing"><legend>📋 Briefing</legend>
+          <label class="campo largo"><span>O que a marca pediu</span><textarea name="briefing" rows="5" placeholder="Cole aqui o briefing: objetivo, público, falas obrigatórias, o que não pode, formato, prazos...">${esc(c.briefing || '')}</textarea></label>
+          <label class="campo largo"><span>Link do briefing (PDF, Drive, Notion...)</span><input name="link_briefing" type="url" value="${esc(c.link_briefing || '')}" placeholder="https://"></label>
+        </fieldset>
+        <fieldset data-sec="anexos"><legend>📎 Imagens e anexos</legend>
+          <label class="qd-drop" id="qd-drop"><input type="file" id="qd-arquivos" accept="image/*,application/pdf" multiple hidden>
+            <span>📷 <b>Toque para escolher</b> (pode marcar várias de uma vez), arraste para cá ou cole com Cmd + V</span></label>
+          <div class="qd-anexos" id="qd-anexos"></div>
+        </fieldset>
+        <fieldset data-sec="cor"><legend>Cor do cartão</legend>
+          <div class="qd-cores"><label><input type="radio" name="cor" value="" ${!c.cor ? 'checked' : ''}><span class="sem" title="Sem cor">✕</span></label>${Object.entries(CORES).map(([k, v]) => `<label><input type="radio" name="cor" value="${k}" ${c.cor === k ? 'checked' : ''}><span style="background:${v}" title="${k}"></span></label>`).join('')}</div>
+        </fieldset>
+        <fieldset data-sec="etiquetas"><legend>Etiquetas</legend>
           <div class="qd-etq-escolha">${Object.entries(ETIQUETAS).map(([k, v]) => `<label><input type="checkbox" name="etq" value="${k}" ${etqs(c).includes(k) ? 'checked' : ''}><span style="--cor:${v.cor}">${v.nome}</span></label>`).join('')}</div>
         </fieldset>
-        <fieldset><legend>Checklist</legend>
+        <fieldset data-sec="checklist"><legend>Checklist</legend>
           <div class="qd-prog"><div></div><span></span></div>
           <div class="qd-chk" id="qd-chk"></div>
           <div class="qd-chk-add"><input id="qd-chk-novo" maxlength="120" placeholder="Adicionar um item e apertar Enter"><button type="button" class="mini-btn" data-chk-add>Adicionar</button></div>
           <button type="button" class="link-precos" data-chk-padrao>Usar a checklist pronta</button>
         </fieldset>
-        <fieldset><legend>Roteiro</legend>
+        <fieldset data-sec="roteiro"><legend>✍️ Roteiro</legend>
           <label class="campo largo"><span>Gancho (os primeiros 3 segundos)</span><textarea name="gancho" rows="2" placeholder="A frase ou cena que faz a pessoa parar de rolar">${esc(c.gancho || '')}</textarea></label>
           <label class="campo largo"><span>Desenvolvimento</span><textarea name="desenvolvimento" rows="5" placeholder="Cenas, falas, mostra do produto, benefícios...">${esc(c.desenvolvimento || '')}</textarea></label>
           <label class="campo largo"><span>Chamada para ação</span><textarea name="cta" rows="2" placeholder="Ex.: Corre no link da bio / Comenta EU QUERO">${esc(c.cta || '')}</textarea></label>
@@ -339,14 +488,22 @@
             <label class="campo"><span>Referência (link)</span><input name="referencia" type="url" value="${esc(c.referencia || '')}" placeholder="Vídeo que te inspirou"></label>
           </div>
         </fieldset>
-        <fieldset><legend>Legenda e anotações</legend>
-          <label class="campo largo"><span>Legenda</span><textarea name="legenda" rows="3">${esc(c.legenda || '')}</textarea></label>
-          <label class="campo largo"><span>Anotações</span><textarea name="notas" rows="2" placeholder="Look, cenário, props, música...">${esc(c.notas || '')}</textarea></label>
+        <fieldset data-sec="gravacao"><legend>🎥 Gravação</legend>
+          <label class="campo largo"><span>Anotações para gravar</span><textarea name="notas" rows="3" placeholder="Look, cenário, luz, props, música, takes que não podem faltar...">${esc(c.notas || '')}</textarea></label>
+          ${window.Tarefas ? '<button type="button" class="mini-btn" data-reservar>📅 Reservar horário para gravar</button>' : ''}
         </fieldset>
-        ${!nova ? `<fieldset><legend>Atalhos</legend><div class="atalhos">
+        <fieldset data-sec="entrega"><legend>📤 Arquivo e envio</legend>
+          <label class="campo largo"><span>Link do arquivo final (Drive, WeTransfer...)</span><input name="link_arquivo" type="url" value="${esc(c.link_arquivo || '')}" placeholder="Cole aqui o link do vídeo pronto para a marca"></label>
+          ${m && m.contato_whatsapp ? `<a class="mini-btn zap" style="margin-top:10px;display:inline-block" target="_blank" rel="noopener" href="https://wa.me/${digitos(m.contato_whatsapp)}?text=${encodeURIComponent(`Oi! Segue o conteúdo "${c.titulo || ''}" para aprovação:${c.link_arquivo ? '\n\n' + c.link_arquivo : ''}`)}">💬 Enviar para a marca</a>` : ''}
+        </fieldset>
+        <fieldset data-sec="post"><legend>🚀 Publicação</legend>
+          <label class="campo largo"><span>Legenda</span><textarea name="legenda" rows="3">${esc(c.legenda || '')}</textarea></label>
+          <label class="campo largo"><span>Link do post (depois de publicar)</span><input name="link_post" type="url" value="${esc(c.link_post || '')}" placeholder="https://instagram.com/..."></label>
+        </fieldset>
+        ${!nova ? `<fieldset data-sec="atalhos"><legend>Atalhos</legend><div class="atalhos">
           <button type="button" class="mini-btn" data-copiar-este>Copiar roteiro</button>
           ${m && m.contato_whatsapp ? `<a class="mini-btn zap" target="_blank" rel="noopener" href="https://wa.me/${digitos(m.contato_whatsapp)}?text=${encodeURIComponent(`Oi! Segue o roteiro para aprovação:\n\n${textoRoteiro(c)}`)}">Enviar para a marca</a>` : ''}
-          ${window.Tarefas ? '<button type="button" class="mini-btn" data-reservar>Reservar horário para gravar</button>' : ''}
+          ${c.link_post ? `<a class="mini-btn" href="${esc(c.link_post)}" target="_blank" rel="noopener">Ver o post</a>` : ''}
           ${c.referencia ? `<a class="mini-btn" href="${esc(c.referencia)}" target="_blank" rel="noopener">Ver referência</a>` : ''}
         </div></fieldset>` : ''}
       </div>
@@ -354,8 +511,55 @@
         <div><button type="button" class="btn-secundario" data-fechar>Cancelar</button><button type="submit" class="btn-primario">${nova ? 'Guardar ✦' : 'Salvar'}</button></div></footer>
     </form>`;
     const f = dlg.querySelector('form');
+    const sec = SECAO_DA_COLUNA[colunaDe(c)], alvoSec = sec && dlg.querySelector(`[data-sec="${sec}"]`);
+    if (alvoSec) {
+      const base = dlg.querySelector('[data-sec="conteudo"]');
+      base.after(alvoSec); alvoSec.classList.add('destacar', 'qd-sec-coluna');
+      alvoSec.querySelector('legend').insertAdjacentHTML('beforeend', ` <small class="qd-sec-tag">desta coluna</small>`);
+    }
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.oncancel = null;
+    // ===== Anexos (sobem na hora; nos cartões que já existem, ficam salvos na hora também) =====
+    let anexos = anx(c).map(x => ({ ...x }));
+    const caixaAnx = dlg.querySelector('#qd-anexos'), drop = dlg.querySelector('#qd-drop'), inpArq = dlg.querySelector('#qd-arquivos');
+    const guardarAnx = async () => { if (nova) return; try { await salvar(c.id, { anexos }); desenhar(); } catch (e) { console.error(e); toast(faltaSQL(e) ? 'Falta ativar os anexos: rode o conteudo-colunas.sql no Supabase.' : 'Não consegui salvar os anexos.', true); } };
+    async function desenharAnx() {
+      if (!anexos.length) { caixaAnx.innerHTML = ''; return; }
+      const urls = await urlsAssinadas(anexos.map(a => a.path)).catch(() => ({}));
+      caixaAnx.innerHTML = anexos.map((a, i) => `<div class="qd-anx">
+        <a href="${esc(urls[a.path] || '#')}" target="_blank" rel="noopener" title="${esc(a.nome || '')}">${/^image\//.test(a.tipo) && urls[a.path] ? `<img src="${esc(urls[a.path])}" alt="${esc(a.nome || 'imagem')}" loading="lazy">` : `<span class="qd-pdf">📄<small>${esc((a.nome || 'arquivo').slice(0, 18))}</small></span>`}</a>
+        <button type="button" class="qd-anx-x" data-anx-del="${i}" aria-label="Remover anexo">×</button>
+        ${i === 0 && /^image\//.test(a.tipo) ? '<span class="qd-capa-tag">capa</span>' : `${/^image\//.test(a.tipo) ? `<button type="button" class="qd-anx-capa" data-anx-capa="${i}" title="Usar como capa do cartão">★</button>` : ''}`}
+      </div>`).join('');
+    }
+    desenharAnx();
+    async function receber(arquivos) {
+      if (!arquivos || !arquivos.length) return;
+      drop.classList.add('enviando'); const txt = drop.querySelector('span'), antes = txt.innerHTML;
+      try {
+        const novos = await enviarAnexos(arquivos, (n, t) => { txt.textContent = `Enviando ${n} de ${t}...`; });
+        anexos = anexos.concat(novos); await desenharAnx(); await guardarAnx();
+        if (novos.length) toast(novos.length > 1 ? `${novos.length} anexos adicionados ✦` : 'Anexo adicionado ✦');
+      } catch (e) {
+        console.error(e);
+        toast(/bucket|not found|row-level|policy|403|404/i.test((e && (e.message + ' ' + (e.statusCode || ''))) || '') ? 'Falta ativar os anexos: rode o conteudo-colunas.sql no Supabase.' : 'Não consegui enviar agora.', true);
+      } finally { drop.classList.remove('enviando'); txt.innerHTML = antes; inpArq.value = ''; }
+    }
+    inpArq.addEventListener('change', () => receber(inpArq.files));
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('sobre'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('sobre'));
+    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('sobre'); receber(e.dataTransfer.files); });
+    dlg.addEventListener('paste', (e) => { const fs = [...(e.clipboardData ? e.clipboardData.files : [])]; if (fs.length) { e.preventDefault(); receber(fs); } });
+    caixaAnx.addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-anx-del]'), capa = e.target.closest('[data-anx-capa]');
+      if (del) {
+        const i = +del.dataset.anxDel, a = anexos[i]; if (!a || !confirm('Remover este anexo?')) return;
+        anexos.splice(i, 1); sb.storage.from('anexos').remove([a.path]).catch(() => {});
+        await desenharAnx(); guardarAnx();
+      }
+      if (capa) { const i = +capa.dataset.anxCapa; const [a] = anexos.splice(i, 1); anexos.unshift(a); await desenharAnx(); guardarAnx(); }
+    });
+
     // ===== Checklist (salva na hora nos cartões que já existem, como no Trello) =====
     let lista = chk(c).map(x => ({ ...x }));
     if (nova && !lista.length) lista = checklistPadrao(!!c.marca_id);
@@ -371,7 +575,7 @@
     }
     desenharChk();
     caixa.addEventListener('change', (e) => { const i = e.target.dataset.chkI; if (i === undefined) return; lista[i].ok = e.target.checked; desenharChk(); guardarChk();
-      if (lista.length && lista.every(x => x.ok) && c.etapa !== 'postado' && !nova) toast('Checklist completa! Dá para mover para "Entregue / postado" ✦'); });
+      if (lista.length && lista.every(x => x.ok) && c.etapa !== 'postado' && !nova) toast(`Checklist completa! Dá para mover para "${FINAL().nome}" ✦`); });
     caixa.addEventListener('click', (e) => { const i = e.target.dataset.chkDel; if (i === undefined) return; lista.splice(Number(i), 1); desenharChk(); guardarChk(); });
     const novoItem = dlg.querySelector('#qd-chk-novo');
     const addItem = () => { const t = novoItem.value.trim(); if (!t) return; lista.push({ t, ok: false }); novoItem.value = ''; desenharChk(); guardarChk(); novoItem.focus(); };
@@ -386,7 +590,7 @@
     // Escreveu o roteiro? Marca como rascunho e sobe a etapa
     ['gancho', 'desenvolvimento', 'cta'].forEach(n => f[n].addEventListener('input', () => {
       if (!f.roteiro_status.value && f[n].value.trim()) f.roteiro_status.value = 'rascunho';
-      if (f.etapa.value === 'ideia' && f[n].value.trim()) f.etapa.value = 'roteiro';
+      if (f.etapa.value === ETAPAS[0].id && f[n].value.trim() && ETAPAS.some(e => e.id === 'roteiro')) f.etapa.value = 'roteiro';
     }));
     const cp = dlg.querySelector('[data-copiar-este]'); if (cp) cp.addEventListener('click', () => navigator.clipboard.writeText(textoRoteiro(c)).then(() => toast('Roteiro copiado ✦')));
     const rs = dlg.querySelector('[data-reservar]'); if (rs) rs.addEventListener('click', () => { dlg.close(); Tarefas.novaCom({ titulo: `Gravar: ${c.titulo}`, categoria: 'gravar', marca_id: c.marca_id }); });
@@ -405,13 +609,14 @@
       const dados = { titulo, formato: f.formato.value || 'reels', marca_id: f.marca_id.value || null, plataforma: f.plataforma.value, etapa: f.etapa.value,
         data_publicacao: t('data_publicacao'), gancho: t('gancho'), desenvolvimento: t('desenvolvimento'), cta: t('cta'),
         roteiro_status: f.roteiro_status.value || null, referencia: t('referencia'), legenda: t('legenda'), notas: t('notas'),
-        link_arquivo: t('link_arquivo'), etiquetas: [...f.querySelectorAll('input[name="etq"]:checked')].map(i => i.value), checklist: lista };
+        anexos, link_arquivo: t('link_arquivo'), briefing: t('briefing'), link_briefing: t('link_briefing'), link_post: t('link_post'), cor: (f.querySelector('input[name="cor"]:checked') || {}).value || null, etiquetas: [...f.querySelectorAll('input[name="etq"]:checked')].map(i => i.value), checklist: lista };
       if (nova || dados.etapa !== c.etapa) { const ult = daColuna(dados.etapa).filter(x => x.id !== c.id).slice(-1)[0]; dados.posicao = ult ? (ult.posicao ?? daColuna(dados.etapa).length) + 1 : 1; }
       try { await salvar(nova ? null : c.id, dados); dlg.close(); desenhar(); toast(nova ? 'Cartão criado ✦' : 'Salvo.'); }
       catch (err) { console.error(err); const el = dlg.querySelector('#c-erro'); el.textContent = faltaSQL(err) ? 'Falta ativar o quadro novo: rode o arquivo conteudo-quadro.sql no Supabase.' : 'Não consegui salvar agora.'; el.hidden = false; }
     });
     dlg.showModal();
     if (nova) setTimeout(() => f.titulo.focus(), 50);
+    else if (alvoSec) { const campo = alvoSec.querySelector('textarea, input[type="url"]'); if (campo && !campo.value) setTimeout(() => campo.focus(), 80); }
   }
 
   function montar() {
@@ -423,6 +628,24 @@
     raiz.addEventListener('click', (e) => {
       if (ignorarClique) return;
       const rc = e.target.closest('[data-qdrecolher]'); if (rc) return alternarColuna(rc.dataset.qdrecolher);
+      if (e.target.closest('[data-qdcolunas]')) return editarColunas();
+      if (e.target.closest('[data-qdnovacol]')) {
+        const box = raiz.querySelector('#qd-nova-col');
+        box.innerHTML = `<input maxlength="40" placeholder="Nome da coluna (ex.: Edição)"><div class="qd-add-acoes"><button type="button" class="btn-primario" data-qdcriarcol>Adicionar coluna</button><button type="button" class="qd-x" data-qdfechar aria-label="Cancelar">×</button></div>
+          <p class="desc" style="margin-top:6px;font-size:.8rem">Ela entra antes de "${esc(FINAL().nome)}". Para mudar a ordem, use ⚙️ Editar colunas.</p>`;
+        const inp = box.querySelector('input'); inp.focus();
+        const criar = async () => {
+          const nome = inp.value.trim(); if (!nome) return inp.focus();
+          const cols = ETAPAS.map(({ id, nome, emoji }) => ({ id, nome, emoji }));
+          cols.splice(cols.length - 1, 0, { id: 'c' + Date.now().toString(36), nome, emoji: '✦' });
+          try { await Tarefas.salvarPrefsParcial({ quadro_colunas: cols }); desenhar(); toast(`Coluna "${nome}" criada ✦`); }
+          catch (err) { console.error(err); toast('Não consegui criar a coluna agora.', true); }
+        };
+        inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); criar(); } if (ev.key === 'Escape') desenharPlanner(); });
+        box.querySelector('[data-qdcriarcol]').addEventListener('click', criar);
+        box.querySelector('[data-qdfechar]').addEventListener('click', () => desenharPlanner());
+        return;
+      }
       if (e.target.closest('[data-qdlimpar]')) { filtro.busca = ''; filtro.marca = ''; filtro.etiqueta = ''; return desenharPlanner(); }
       const ab = e.target.closest('[data-qdabrir]');
       if (ab) {
@@ -454,6 +677,7 @@
   window.Conteudo = {
     async iniciar(cliente, secao) {
       sb = cliente; raiz = secao; montar();
+      sb.auth.getUser().then(({ data }) => { uid = data && data.user && data.user.id; }).catch(() => {});
       try {
         let tudo = [], ini = 0;
         while (true) {

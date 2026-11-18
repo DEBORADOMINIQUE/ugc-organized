@@ -5,7 +5,8 @@
    só conferir e salvar. Chama a Edge Function "assistente".
    ========================================================= */
 (function () {
-  let sb, imagem = null, ultimo = null;
+  let sb, imagens = [], ultimo = null;
+  const MAX_IMAGENS = 8;
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const hoje = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const ROTULOS = { prospeccao: '📸 Abordagem (Prospecção)', marca: '💼 Parceria (Marcas)', tarefa: '🗓️ Tarefa', conteudo: '🎬 Conteúdo', despesa: '🧾 Despesa', nada: '✦ Nada para registrar' };
@@ -61,12 +62,12 @@
   async function processar() {
     const dlg = document.getElementById('assistente-dlg');
     const texto = dlg.querySelector('#as-texto').value.trim();
-    if (!texto && !imagem) return toast('Cole um texto ou envie um print.', true);
+    if (!texto && !imagens.length) return toast('Cole um texto ou envie um print.', true);
     const btn = dlg.querySelector('#as-ir'), res = dlg.querySelector('#as-resultado');
     btn.disabled = true; btn.textContent = 'Lendo... ✦';
     res.innerHTML = '<div class="as-pensando"><span></span><span></span><span></span></div>';
     try {
-      const { data: r, error } = await sb.functions.invoke('bright-endpoint', { body: { texto, imagem: imagem && { media_type: imagem.media_type, data: imagem.data }, hoje: hoje() } });
+      const { data: r, error } = await sb.functions.invoke('bright-endpoint', { body: { texto, imagens: imagens.map(i => ({ media_type: i.media_type, data: i.data })), imagem: imagens[0] && { media_type: imagens[0].media_type, data: imagens[0].data }, hoje: hoje() } });
       if (error) {
         let msg = 'O assistente ainda não está ativado. Siga os passos de configuração.';
         try { const corpo = await error.context.json(); if (corpo && corpo.erro) msg = corpo.erro; } catch (e) {}
@@ -88,14 +89,14 @@
 
   function abrir() {
     const dlg = document.getElementById('assistente-dlg');
-    imagem = null;
+    imagens = [];
     dlg.innerHTML = `<div class="ficha">
       <header class="ficha-cab"><div><small>Raquel · sua assistente ✦</small><h2>Oi, ${window.Tarefas ? Tarefas.nome() : G.apelido()}! Sou a Raquel. O que aconteceu?</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
       <div class="ficha-corpo">
         <p class="desc" style="margin-top:12px">Cole a conversa com a marca, o e-mail, o briefing, ou só escreva do seu jeito ("abordei a Sallve pelo direct", "gravar o reels da Kaisan sexta às 14h", "comprei um microfone de 189"). Eu entendo e preencho a ficha certa.</p>
         <label class="campo largo"><textarea id="as-texto" rows="7" placeholder="Cole ou escreva aqui..."></textarea></label>
         <div class="as-print">
-          <label class="mini-btn"><input type="file" id="as-arquivo" accept="image/*" hidden>📷 Enviar print</label>
+          <label class="mini-btn"><input type="file" id="as-arquivo" accept="image/*" multiple hidden>📷 Enviar prints (pode marcar vários)</label>
           <div id="as-previa"></div>
         </div>
         <div id="as-resultado"></div>
@@ -105,23 +106,34 @@
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.querySelector('#as-ir').addEventListener('click', processar);
     dlg.querySelector('#as-texto').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) processar(); });
-    dlg.querySelector('#as-arquivo').addEventListener('change', async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      try {
-        imagem = await lerImagem(f);
-        dlg.querySelector('#as-previa').innerHTML = `<div class="as-mini"><img src="${imagem.previa}" alt="Print enviado"><button type="button" aria-label="Tirar print">×</button></div>`;
-        dlg.querySelector('.as-mini button').onclick = () => { imagem = null; dlg.querySelector('#as-previa').innerHTML = ''; };
-      } catch (x) { toast('Não consegui abrir essa imagem.', true); }
-    });
+    const previa = dlg.querySelector('#as-previa');
+    const desenharPrevia = () => {
+      previa.innerHTML = imagens.map((im, i) => `<div class="as-mini"><img src="${im.previa}" alt="Print ${i + 1}"><button type="button" data-tirar="${i}" aria-label="Tirar print ${i + 1}">×</button></div>`).join('')
+        + (imagens.length > 1 ? `<small class="as-qtd">${imagens.length} prints</small>` : '');
+    };
+    previa.addEventListener('click', (e) => { const b = e.target.closest('[data-tirar]'); if (!b) return; imagens.splice(+b.dataset.tirar, 1); desenharPrevia(); });
+    async function adicionar(arquivos) {
+      const lista = [...arquivos].filter(f => f && f.type && f.type.startsWith('image/'));
+      if (!lista.length) return;
+      const cabe = MAX_IMAGENS - imagens.length;
+      if (cabe <= 0) return toast(`Até ${MAX_IMAGENS} prints por vez.`, true);
+      if (lista.length > cabe) toast(`Peguei só ${cabe}: o limite é ${MAX_IMAGENS} prints por vez.`, true);
+      for (const f of lista.slice(0, cabe)) {
+        try { imagens.push(await lerImagem(f)); } catch (x) { toast(`Não consegui abrir ${f.name || 'uma imagem'}.`, true); }
+      }
+      desenharPrevia();
+    }
+    dlg.querySelector('#as-arquivo').addEventListener('change', async (e) => { await adicionar(e.target.files); e.target.value = ''; });
     // Colar um print direto (Cmd+V) também funciona
     dlg.addEventListener('paste', async (e) => {
-      const item = [...(e.clipboardData || {}).items || []].find(i => i.type.startsWith('image/'));
-      if (!item) return;
+      const itens = [...(e.clipboardData || {}).items || []].filter(i => i.type.startsWith('image/'));
+      if (!itens.length) return;
       e.preventDefault();
-      imagem = await lerImagem(item.getAsFile());
-      dlg.querySelector('#as-previa').innerHTML = `<div class="as-mini"><img src="${imagem.previa}" alt="Print colado"><button type="button" aria-label="Tirar print">×</button></div>`;
-      dlg.querySelector('.as-mini button').onclick = () => { imagem = null; dlg.querySelector('#as-previa').innerHTML = ''; };
+      await adicionar(itens.map(i => i.getAsFile()));
     });
+    // Arrastar vários prints para dentro da Raquel
+    dlg.addEventListener('dragover', (e) => { if ([...(e.dataTransfer.items || [])].some(i => i.kind === 'file')) e.preventDefault(); });
+    dlg.addEventListener('drop', (e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); adicionar(e.dataTransfer.files); });
     dlg.showModal();
     setTimeout(() => dlg.querySelector('#as-texto').focus(), 50);
   }
