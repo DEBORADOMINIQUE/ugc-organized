@@ -1,24 +1,54 @@
 /* =========================================================
    conteudo.js · Área "Conteúdo" do UGC Organized
-   Planner (da ideia ao post), calendário de publicação e
-   biblioteca de roteiros (gancho, desenvolvimento, chamada).
-   Tabela: conteudos (ver conteudo.sql).
+   Quadro de produção estilo Trello (da ideia à entrega/post):
+   colunas, cartões com etiquetas, prazo, checklist e marca,
+   arrastar entre colunas e reordenar, adicionar rápido.
+   Biblioteca de roteiros (gancho, desenvolvimento, chamada).
+   Tabela: conteudos (conteudo.sql + conteudo-quadro.sql).
    ========================================================= */
 (function () {
   const ETAPAS = [
-    { id: 'ideia', nome: 'Ideias', emoji: '💡' },
-    { id: 'roteiro', nome: 'Roteiro', emoji: '✍️' },
-    { id: 'gravar', nome: 'Gravar', emoji: '🎥' },
-    { id: 'editar', nome: 'Editar', emoji: '✂️' },
-    { id: 'agendado', nome: 'Pronto / agendado', emoji: '📅' },
-    { id: 'postado', nome: 'Postado / entregue', emoji: '✓' }
+    { id: 'ideia', nome: 'Ideias', emoji: '💡', dica: 'Tudo que pode virar conteúdo' },
+    { id: 'briefing', nome: 'Aguardando briefing', emoji: '📋', dica: 'Esperando a marca mandar o briefing' },
+    { id: 'produto', nome: 'Aguardando produto', emoji: '📦', dica: 'Esperando o produto chegar' },
+    { id: 'roteiro', nome: 'Roteiro', emoji: '✍️', dica: 'Gancho, falas e chamada' },
+    { id: 'aprovacao', nome: 'Aprovação da marca', emoji: '📨', dica: 'Esperando a marca aprovar' },
+    { id: 'gravar', nome: 'Gravar', emoji: '🎥', dica: 'Pronto para gravar' },
+    { id: 'editar', nome: 'Editar', emoji: '✂️', dica: 'Corte, legenda e música' },
+    { id: 'ajustes', nome: 'Ajustes', emoji: '🔁', dica: 'A marca pediu alterações' },
+    { id: 'agendado', nome: 'Pronto / agendado', emoji: '📅', dica: 'Esperando a data' },
+    { id: 'postado', nome: 'Entregue / postado', emoji: '✓', dica: 'Concluído' }
   ];
+  const ETIQUETAS = {
+    urgente: { nome: 'Urgente', cor: '#ff4d6d' },
+    pago: { nome: 'Pago', cor: '#7fc400' },
+    permuta: { nome: 'Permuta', cor: '#a77bff' },
+    ads: { nome: 'Anúncio / Ads', cor: '#3d8bff' },
+    collab: { nome: 'Collab', cor: '#ff2d9b' },
+    organico: { nome: 'Orgânico', cor: '#f2b705' },
+    produto: { nome: 'Esperando produto', cor: '#ff8a3d' }
+  };
+  // Checklist que já vem pronta em cada cartão novo (dá para editar)
+  function checklistPadrao(paraMarca) {
+    return (paraMarca
+      ? ['Ler o briefing', 'Escrever o roteiro', 'Roteiro aprovado pela marca', 'Gravar', 'Editar', 'Enviar para aprovação', 'Vídeo aprovado', 'Entregar o arquivo final']
+      : ['Escrever o roteiro', 'Gravar', 'Editar', 'Legenda e hashtags', 'Capa', 'Agendar ou postar']).map(t => ({ t, ok: false }));
+  }
   const NOME_ETAPA = Object.fromEntries(ETAPAS.map(e => [e.id, e.nome]));
   const PLATAFORMAS = { instagram: '📸 Instagram', tiktok: '🎵 TikTok', youtube: '▶️ YouTube', marca: '💼 Para a marca', outro: '✦ Outro' };
   const FORMATOS = { reels: 'Reels', carrossel: 'Carrossel', story: 'Story', foto: 'Foto', video_ugc: 'Vídeo UGC', live: 'Live', video_longo: 'Vídeo longo' };
   const STATUS_ROTEIRO = { rascunho: { nome: 'Rascunho', cor: 'neutro' }, enviado: { nome: 'Enviado à marca', cor: 'alerta' }, ajustes: { nome: 'Pediram ajustes', cor: 'atraso' }, aprovado: { nome: 'Aprovado', cor: 'ok' } };
 
   let sb, raiz, itens = [], visao = 'planner', mesCal = new Date(), carregado = false, arrastando = null;
+  const filtro = { busca: '', marca: '', etiqueta: '' };
+  const chk = (c) => (Array.isArray(c.checklist) ? c.checklist : []);
+  const etqs = (c) => (Array.isArray(c.etiquetas) ? c.etiquetas : []);
+  // Colunas recolhidas (fica guardado neste aparelho)
+  let recolhidas = []; try { recolhidas = JSON.parse(localStorage.getItem('oug_qd_recolhidas') || '[]'); } catch (e) {}
+  const alternarColuna = (id) => { recolhidas = recolhidas.includes(id) ? recolhidas.filter(x => x !== id) : recolhidas.concat(id); try { localStorage.setItem('oug_qd_recolhidas', JSON.stringify(recolhidas)); } catch (e) {} desenharPlanner(); };
+  // O que a marca ainda vai mandar (lista do acordo nas Marcas)
+  const aReceber = (marcaId) => { const m = marcaId && marcas().find(x => x.id === marcaId); return m && Array.isArray(m.acordo) ? m.acordo.filter(x => x.envio && !x.recebido) : []; };
+  const faltaSQL = (e) => /checklist|etiquetas|posicao|link_arquivo|etapa_check|aprovacao|ajustes|briefing|23514|PGRST204/i.test((e && (e.message + ' ' + e.code)) || '');
   mesCal.setDate(1);
 
   const $ = (s, el) => (el || raiz).querySelector(s);
@@ -64,10 +94,33 @@
   async function mover(id, etapa) {
     const c = itens.find(x => x.id === id); if (!c || c.etapa === etapa) return;
     try {
-      await salvar(id, { etapa }); desenhar();
+      const extra = etapa === 'aprovacao' && temRoteiro(c) && (!c.roteiro_status || c.roteiro_status === 'rascunho') ? { roteiro_status: 'enviado' } : {};
+      if (c.etapa === 'produto' && etqs(c).includes('produto')) extra.etiquetas = etqs(c).filter(k => k !== 'produto');
+      await salvar(id, { etapa, ...extra }); desenhar();
       toast(etapa === 'postado' ? `${c.titulo}: no ar! ${G.t('Arrasou', 'Mandou bem')}, ${G.apelido()} ✦` : `${c.titulo} foi para "${NOME_ETAPA[etapa]}"`);
       if (etapa === 'gravar' && window.Tarefas && confirm('Quer reservar um horário para gravar?')) Tarefas.novaCom({ titulo: `Gravar: ${c.titulo}`, categoria: 'gravar', marca_id: c.marca_id });
-    } catch (e) { console.error(e); toast('Não consegui mover agora.', true); }
+    } catch (e) { console.error(e); toast(faltaSQL(e) ? 'Falta ativar o quadro novo: rode o conteudo-quadro.sql no Supabase.' : 'Não consegui mover agora.', true); }
+  }
+
+  // Ordem dos cartões dentro da coluna (como no Trello)
+  const ordenar = (lista) => lista.slice().sort((a, b) => (a.posicao ?? 1e9) - (b.posicao ?? 1e9) || (a.data_publicacao || '9999').localeCompare(b.data_publicacao || '9999') || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const daColuna = (etapa) => ordenar(itens.filter(c => c.etapa === etapa));
+  async function soltar(id, etapa, antesDe) {
+    const c = itens.find(x => x.id === id); if (!c) return;
+    const lista = daColuna(etapa).filter(x => x.id !== id);
+    const i = antesDe ? lista.findIndex(x => x.id === antesDe) : -1;
+    lista.splice(i < 0 ? lista.length : i, 0, c);
+    const mudouEtapa = c.etapa !== etapa;
+    try {
+      if (mudouEtapa) await mover(id, etapa);
+      await Promise.all(lista.map((x, n) => (x.posicao === n + 1 ? null : salvar(x.id, { posicao: n + 1 }))).filter(Boolean));
+      desenhar();
+    } catch (e) { console.error(e); toast(faltaSQL(e) ? 'Falta ativar o quadro novo: rode o conteudo-quadro.sql no Supabase.' : 'Não consegui reorganizar agora.', true); desenhar(); }
+  }
+  async function criarRapido(etapa, titulo) {
+    const ult = daColuna(etapa).slice(-1)[0];
+    const pos = ult ? (ult.posicao ?? daColuna(etapa).length) + 1 : 1;
+    await salvar(null, { titulo, etapa, formato: 'reels', plataforma: 'instagram', posicao: pos, checklist: checklistPadrao(false) });
   }
 
   // ===== Desenho =====
@@ -75,13 +128,13 @@
     if (!carregado) return;
     const h = hoje(), semana = somaDias(h, 6);
     const daSemana = itens.filter(c => c.data_publicacao && c.data_publicacao >= h && c.data_publicacao <= semana);
-    const aguardando = itens.filter(c => c.roteiro_status === 'enviado');
+    const aguardando = itens.filter(c => c.etapa === 'aprovacao' || (c.roteiro_status === 'enviado' && c.etapa !== 'postado'));
     const atrasados = itens.filter(c => c.data_publicacao && c.data_publicacao < h && c.etapa !== 'postado');
     const postadosMes = itens.filter(c => c.etapa === 'postado' && c.data_publicacao && c.data_publicacao.slice(0, 7) === h.slice(0, 7));
     $('#c-numeros').innerHTML = `
       <div class="cartao numero destaque"><div class="rotulo">Para os próximos 7 dias</div><div class="valor">${daSemana.length}</div><div class="extra">${daSemana.filter(c => c.etapa === 'agendado' || c.etapa === 'postado').length} já prontos</div></div>
       <div class="cartao numero"><div class="rotulo">Postados no mês</div><div class="valor">${postadosMes.length}</div><div class="extra">conteúdos no ar</div></div>
-      <div class="cartao numero"><div class="rotulo">Roteiros com a marca</div><div class="valor">${aguardando.length}</div><div class="extra">esperando aprovação</div></div>
+      <div class="cartao numero"><div class="rotulo">Com a marca</div><div class="valor">${aguardando.length}</div><div class="extra">esperando aprovação</div></div>
       <div class="cartao numero"><div class="rotulo">Banco de ideias</div><div class="valor">${itens.filter(c => c.etapa === 'ideia').length}</div><div class="extra">${atrasados.length ? `⚠ ${atrasados.length} com data passada` : 'nada atrasado ✦'}</div></div>`;
     $$('.vis-btn', raiz).forEach(b => b.classList.toggle('ativo', b.dataset.cvis === visao));
     if (visao === 'planner') desenharPlanner(); else if (visao === 'calendario') desenharCalendario(); else desenharRoteiros();
@@ -89,15 +142,27 @@
 
   function cartao(c) {
     const i = ETAPAS.findIndex(e => e.id === c.etapa), prox = ETAPAS[i + 1];
-    const marca = c.marca_id && nomeMarca(c.marca_id), atrasado = c.data_publicacao && c.data_publicacao < hoje() && c.etapa !== 'postado';
-    return `<article class="card-marca" draggable="true" data-cid="${c.id}" tabindex="0">
-      <div class="card-topo"><strong>${esc(c.titulo)}</strong></div>
-      <div class="t-meta"><span class="chip">${esc(FORMATOS[c.formato] || c.formato)}</span>${marca ? `<span class="chip marca">💼 ${esc(marca)}</span>` : ''}</div>
-      ${c.data_publicacao ? `<div class="tag-data ${atrasado ? 'alerta' : ''}">${c.etapa === 'postado' ? 'Postado' : 'Postar'} ${c.data_publicacao === hoje() ? 'hoje' : fmtCurta(c.data_publicacao)}</div>` : ''}
-      ${c.roteiro_status ? `<div class="prazo ${STATUS_ROTEIRO[c.roteiro_status].cor}">✍️ ${STATUS_ROTEIRO[c.roteiro_status].nome}</div>` : ''}
+    const marca = c.marca_id && nomeMarca(c.marca_id), h = hoje(), feito = c.etapa === 'postado';
+    const d = c.data_publicacao, classeData = !d ? '' : feito ? 'ok' : d < h ? 'atraso' : d <= somaDias(h, 2) ? 'alerta' : '';
+    const lista = chk(c), ok = lista.filter(x => x.ok).length;
+    return `<article class="card-marca qd-card" draggable="true" data-cid="${c.id}" tabindex="0">
+      ${etqs(c).length ? `<div class="qd-etqs">${etqs(c).filter(k => ETIQUETAS[k]).map(k => `<span style="background:${ETIQUETAS[k].cor}" title="${ETIQUETAS[k].nome}">${ETIQUETAS[k].nome}</span>`).join('')}</div>` : ''}
+      <div class="qd-titulo">${esc(c.titulo)}</div>
+      <div class="qd-badges">
+        ${d ? `<span class="qd-badge ${classeData}" title="${feito ? 'Concluído' : 'Prazo'}">🕒 ${d === h ? 'hoje' : fmtCurta(d)}</span>` : ''}
+        ${lista.length ? `<span class="qd-badge ${ok === lista.length ? 'ok' : ''}" title="Checklist">☑ ${ok}/${lista.length}</span>` : ''}
+        ${c.roteiro_status ? `<span class="qd-badge ${c.roteiro_status === 'aprovado' ? 'ok' : c.roteiro_status === 'ajustes' ? 'atraso' : ''}" title="Roteiro: ${STATUS_ROTEIRO[c.roteiro_status].nome}">✍️ ${STATUS_ROTEIRO[c.roteiro_status].nome}</span>` : temRoteiro(c) ? '<span class="qd-badge" title="Tem roteiro">✍️</span>' : ''}
+        ${c.link_arquivo ? '<span class="qd-badge" title="Arquivo final anexado">📎</span>' : ''}
+        ${aReceber(c.marca_id).length && c.etapa !== 'postado' ? `<span class="qd-badge alerta" title="${esc(aReceber(c.marca_id).map(x => x.item).join(', '))}">📦 ${aReceber(c.marca_id).length} a receber</span>` : ''}
+        <span class="qd-badge fmt">${esc(FORMATOS[c.formato] || c.formato)}</span>
+      </div>
+      ${marca ? `<div class="qd-marca"><span class="qd-av">${esc(marca.trim().charAt(0).toUpperCase())}</span>${esc(marca)}</div>` : ''}
       ${prox ? `<button class="avancar" data-cavancar="${c.id}" data-para="${prox.id}" title="Mover para ${prox.nome}">→</button>` : ''}
     </article>`;
   }
+  const visivel = (c) => (!filtro.busca || (c.titulo + ' ' + (c.notas || '') + ' ' + (nomeMarca(c.marca_id) || '')).toLowerCase().includes(filtro.busca.toLowerCase()))
+    && (!filtro.marca || (filtro.marca === 'meu' ? !c.marca_id : c.marca_id === filtro.marca))
+    && (!filtro.etiqueta || etqs(c).includes(filtro.etiqueta));
 
   function desenharPlanner() {
     if (!itens.length) {
@@ -106,21 +171,44 @@
         <button class="btn-primario" data-cnovo>+ Primeira ideia</button></div>`;
       return;
     }
-    $('#c-visao').innerHTML = `<div class="funil">${ETAPAS.map(e => {
-      const lista = itens.filter(c => c.etapa === e.id).sort((a, b) => (a.data_publicacao || '9999').localeCompare(b.data_publicacao || '9999'));
-      return `<section class="coluna" data-cetapa="${e.id}"><header><div><h3>${e.emoji} ${e.nome} <span class="qtd">${lista.length}</span></h3></div></header>
-        <div class="cards">${lista.slice(0, e.id === 'postado' ? 12 : 99).map(cartao).join('') || '<p class="coluna-vazia">Arraste para cá</p>'}</div>
-        ${e.id === 'ideia' ? '<button class="add-coluna" data-cnovo>+ Nova ideia</button>' : ''}</section>`;
+    const ms = marcas().filter(m => itens.some(c => c.marca_id === m.id));
+    const ativo = filtro.busca || filtro.marca || filtro.etiqueta;
+    $('#c-visao').innerHTML = `<div class="qd-filtros">
+        <input type="search" data-qdbusca placeholder="🔎 Buscar cartão" value="${esc(filtro.busca)}">
+        <select data-qdmarca><option value="">Todos os conteúdos</option><option value="meu" ${filtro.marca === 'meu' ? 'selected' : ''}>🌸 Só os meus</option>${ms.map(m => `<option value="${m.id}" ${filtro.marca === m.id ? 'selected' : ''}>💼 ${esc(m.nome)}</option>`).join('')}</select>
+        <select data-qdetq><option value="">Todas as etiquetas</option>${Object.entries(ETIQUETAS).map(([k, v]) => `<option value="${k}" ${filtro.etiqueta === k ? 'selected' : ''}>${v.nome}</option>`).join('')}</select>
+        ${ativo ? '<button class="link-precos" data-qdlimpar>Limpar filtros</button>' : ''}
+      </div>
+      <div class="funil qd-quadro">${ETAPAS.map(e => {
+      const todos = daColuna(e.id), lista = todos.filter(visivel);
+      if (recolhidas.includes(e.id)) return `<section class="coluna qd-coluna recolhida" data-cetapa="${e.id}" data-qdrecolher="${e.id}" title="Abrir ${e.nome}"><span class="qd-vert">${e.emoji} ${e.nome} · ${todos.length}</span></section>`;
+      return `<section class="coluna qd-coluna" data-cetapa="${e.id}"><header><div><h3>${e.emoji} ${e.nome} <span class="qtd">${todos.length}</span></h3><small>${e.dica}</small></div><button class="qd-recolher" data-qdrecolher="${e.id}" title="Recolher coluna" aria-label="Recolher ${e.nome}">‹</button></header>
+        <div class="cards">${lista.slice(0, e.id === 'postado' ? 15 : 200).map(cartao).join('') || `<p class="coluna-vazia">${ativo ? 'Nada com esse filtro' : 'Arraste para cá'}</p>`}</div>
+        ${e.id === 'postado' && lista.length > 15 ? `<p class="qd-mais">+ ${lista.length - 15} concluídos</p>` : ''}
+        <div class="qd-add" data-qdadd="${e.id}"><button class="add-coluna" data-qdabrir>+ Adicionar cartão</button></div></section>`;
     }).join('')}</div>`;
     $$('.card-marca[data-cid]').forEach(el => {
-      el.addEventListener('dragstart', (ev) => { arrastando = el.dataset.cid; el.classList.add('arrastando'); ev.dataTransfer.setData('text/plain', arrastando); });
-      el.addEventListener('dragend', () => { el.classList.remove('arrastando'); $$('.coluna').forEach(k => k.classList.remove('sobre')); });
+      el.addEventListener('dragstart', (ev) => { arrastando = el.dataset.cid; el.classList.add('arrastando'); ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', arrastando); });
+      el.addEventListener('dragend', () => { el.classList.remove('arrastando'); $$('.coluna').forEach(k => k.classList.remove('sobre')); $$('.qd-antes').forEach(k => k.classList.remove('qd-antes')); });
     });
+    // Cartão que vai ficar logo abaixo de onde a pessoa soltou
+    const alvo = (col, y) => [...col.querySelectorAll('.card-marca[data-cid]:not(.arrastando)')].find(el => { const r = el.getBoundingClientRect(); return y < r.top + r.height / 2; });
     $$('.coluna[data-cetapa]').forEach(col => {
-      col.addEventListener('dragover', (ev) => { if (!arrastando) return; ev.preventDefault(); col.classList.add('sobre'); });
-      col.addEventListener('dragleave', (ev) => { if (!col.contains(ev.relatedTarget)) col.classList.remove('sobre'); });
-      col.addEventListener('drop', (ev) => { ev.preventDefault(); col.classList.remove('sobre'); const id = arrastando; arrastando = null; if (id) mover(id, col.dataset.cetapa); });
+      col.addEventListener('dragover', (ev) => {
+        if (!arrastando) return; ev.preventDefault(); col.classList.add('sobre');
+        $$('.qd-antes').forEach(k => k.classList.remove('qd-antes')); const a = alvo(col, ev.clientY); if (a) a.classList.add('qd-antes');
+      });
+      col.addEventListener('dragleave', (ev) => { if (!col.contains(ev.relatedTarget)) { col.classList.remove('sobre'); $$('.qd-antes', col).forEach(k => k.classList.remove('qd-antes')); } });
+      col.addEventListener('drop', (ev) => {
+        ev.preventDefault(); col.classList.remove('sobre'); const a = alvo(col, ev.clientY);
+        $$('.qd-antes').forEach(k => k.classList.remove('qd-antes'));
+        const id = arrastando; arrastando = null; if (id) soltar(id, col.dataset.cetapa, a ? a.dataset.cid : null);
+      });
     });
+    const bus = $('[data-qdbusca]');
+    bus.addEventListener('input', () => { filtro.busca = bus.value; const p = bus.selectionStart; desenharPlanner(); const n = $('[data-qdbusca]'); n.focus(); n.setSelectionRange(p, p); });
+    $('[data-qdmarca]').addEventListener('change', (ev) => { filtro.marca = ev.target.value; desenharPlanner(); });
+    $('[data-qdetq]').addEventListener('change', (ev) => { filtro.etiqueta = ev.target.value; desenharPlanner(); });
   }
 
   function desenharCalendario() {
@@ -171,8 +259,18 @@
             <label class="campo"><span>Para quem?</span><select name="marca_id"><option value="">🌸 Meu conteúdo</option>${ativas.map(x => `<option value="${x.id}" ${c.marca_id === x.id ? 'selected' : ''}>💼 ${esc(x.nome)}</option>`).join('')}</select></label>
             <label class="campo"><span>Onde vai sair</span><select name="plataforma">${Object.entries(PLATAFORMAS).map(([k, v]) => `<option value="${k}" ${c.plataforma === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
             <label class="campo"><span>Etapa</span><select name="etapa">${ETAPAS.map(e => `<option value="${e.id}" ${c.etapa === e.id ? 'selected' : ''}>${e.emoji} ${e.nome}</option>`).join('')}</select></label>
-            <label class="campo"><span>Data de publicação / entrega</span><input type="date" name="data_publicacao" value="${c.data_publicacao || ''}"></label>
+            <label class="campo"><span>Prazo (entrega ou post)</span><input type="date" name="data_publicacao" value="${c.data_publicacao || ''}"></label>
           </div>
+          <label class="campo largo" style="margin-top:12px"><span>Link do arquivo final (Drive, WeTransfer...)</span><input name="link_arquivo" type="url" value="${esc(c.link_arquivo || '')}" placeholder="Cole aqui o link do vídeo pronto para a marca"></label>
+        </fieldset>
+        <fieldset><legend>Etiquetas</legend>
+          <div class="qd-etq-escolha">${Object.entries(ETIQUETAS).map(([k, v]) => `<label><input type="checkbox" name="etq" value="${k}" ${etqs(c).includes(k) ? 'checked' : ''}><span style="--cor:${v.cor}">${v.nome}</span></label>`).join('')}</div>
+        </fieldset>
+        <fieldset><legend>Checklist</legend>
+          <div class="qd-prog"><div></div><span></span></div>
+          <div class="qd-chk" id="qd-chk"></div>
+          <div class="qd-chk-add"><input id="qd-chk-novo" maxlength="120" placeholder="Adicionar um item e apertar Enter"><button type="button" class="mini-btn" data-chk-add>Adicionar</button></div>
+          <button type="button" class="link-precos" data-chk-padrao>Usar a checklist pronta</button>
         </fieldset>
         <fieldset><legend>Roteiro</legend>
           <label class="campo largo"><span>Gancho (os primeiros 3 segundos)</span><textarea name="gancho" rows="2" placeholder="A frase ou cena que faz a pessoa parar de rolar">${esc(c.gancho || '')}</textarea></label>
@@ -200,8 +298,33 @@
     const f = dlg.querySelector('form');
     dlg.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => dlg.close()));
     dlg.oncancel = null;
+    // ===== Checklist (salva na hora nos cartões que já existem, como no Trello) =====
+    let lista = chk(c).map(x => ({ ...x }));
+    if (nova && !lista.length) lista = checklistPadrao(!!c.marca_id);
+    const caixa = dlg.querySelector('#qd-chk');
+    const guardarChk = async () => { if (nova) return; try { await salvar(c.id, { checklist: lista }); desenhar(); } catch (e) { console.error(e); toast(faltaSQL(e) ? 'Falta ativar o quadro novo: rode o conteudo-quadro.sql no Supabase.' : 'Não consegui salvar a checklist.', true); } };
+    function desenharChk() {
+      const ok = lista.filter(x => x.ok).length, pct = lista.length ? Math.round(ok / lista.length * 100) : 0;
+      dlg.querySelector('.qd-prog div').style.width = pct + '%';
+      dlg.querySelector('.qd-prog span').textContent = lista.length ? `${pct}%` : '';
+      dlg.querySelector('.qd-prog').classList.toggle('completo', !!lista.length && ok === lista.length);
+      caixa.innerHTML = lista.map((x, i) => `<div class="qd-item ${x.ok ? 'ok' : ''}"><label><input type="checkbox" data-chk-i="${i}" ${x.ok ? 'checked' : ''}><span>${esc(x.t)}</span></label><button type="button" class="qd-x" data-chk-del="${i}" aria-label="Remover item">×</button></div>`).join('') || '<p class="desc">Sem itens. Adicione abaixo ou use a checklist pronta.</p>';
+      dlg.querySelector('[data-chk-padrao]').hidden = !!lista.length;
+    }
+    desenharChk();
+    caixa.addEventListener('change', (e) => { const i = e.target.dataset.chkI; if (i === undefined) return; lista[i].ok = e.target.checked; desenharChk(); guardarChk();
+      if (lista.length && lista.every(x => x.ok) && c.etapa !== 'postado' && !nova) toast('Checklist completa! Dá para mover para "Entregue / postado" ✦'); });
+    caixa.addEventListener('click', (e) => { const i = e.target.dataset.chkDel; if (i === undefined) return; lista.splice(Number(i), 1); desenharChk(); guardarChk(); });
+    const novoItem = dlg.querySelector('#qd-chk-novo');
+    const addItem = () => { const t = novoItem.value.trim(); if (!t) return; lista.push({ t, ok: false }); novoItem.value = ''; desenharChk(); guardarChk(); novoItem.focus(); };
+    dlg.querySelector('[data-chk-add]').addEventListener('click', addItem);
+    novoItem.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
+    dlg.querySelector('[data-chk-padrao]').addEventListener('click', () => { lista = checklistPadrao(!!f.marca_id.value); desenharChk(); guardarChk(); });
     // Escolheu uma marca? Já sugere "vídeo UGC" e "para a marca"
-    f.marca_id.addEventListener('change', () => { if (f.marca_id.value && nova) { f.plataforma.value = 'marca'; const r = f.querySelector('input[value="video_ugc"]'); if (r) r.checked = true; } });
+    f.marca_id.addEventListener('change', () => {
+      if (f.marca_id.value && nova) { f.plataforma.value = 'marca'; const r = f.querySelector('input[value="video_ugc"]'); if (r) r.checked = true; }
+      if (nova && !lista.some(x => x.ok)) { lista = checklistPadrao(!!f.marca_id.value); desenharChk(); }
+    });
     // Escreveu o roteiro? Marca como rascunho e sobe a etapa
     ['gancho', 'desenvolvimento', 'cta'].forEach(n => f[n].addEventListener('input', () => {
       if (!f.roteiro_status.value && f[n].value.trim()) f.roteiro_status.value = 'rascunho';
@@ -223,9 +346,11 @@
       const t = (n) => f[n].value.trim() || null;
       const dados = { titulo, formato: f.formato.value || 'reels', marca_id: f.marca_id.value || null, plataforma: f.plataforma.value, etapa: f.etapa.value,
         data_publicacao: t('data_publicacao'), gancho: t('gancho'), desenvolvimento: t('desenvolvimento'), cta: t('cta'),
-        roteiro_status: f.roteiro_status.value || null, referencia: t('referencia'), legenda: t('legenda'), notas: t('notas') };
-      try { await salvar(nova ? null : c.id, dados); dlg.close(); desenhar(); toast(nova ? 'Ideia guardada ✦' : 'Salvo.'); }
-      catch (err) { console.error(err); const el = dlg.querySelector('#c-erro'); el.textContent = 'Não consegui salvar agora.'; el.hidden = false; }
+        roteiro_status: f.roteiro_status.value || null, referencia: t('referencia'), legenda: t('legenda'), notas: t('notas'),
+        link_arquivo: t('link_arquivo'), etiquetas: [...f.querySelectorAll('input[name="etq"]:checked')].map(i => i.value), checklist: lista };
+      if (nova || dados.etapa !== c.etapa) { const ult = daColuna(dados.etapa).filter(x => x.id !== c.id).slice(-1)[0]; dados.posicao = ult ? (ult.posicao ?? daColuna(dados.etapa).length) + 1 : 1; }
+      try { await salvar(nova ? null : c.id, dados); dlg.close(); desenhar(); toast(nova ? 'Cartão criado ✦' : 'Salvo.'); }
+      catch (err) { console.error(err); const el = dlg.querySelector('#c-erro'); el.textContent = faltaSQL(err) ? 'Falta ativar o quadro novo: rode o arquivo conteudo-quadro.sql no Supabase.' : 'Não consegui salvar agora.'; el.hidden = false; }
     });
     dlg.showModal();
     if (nova) setTimeout(() => f.titulo.focus(), 50);
@@ -233,11 +358,28 @@
 
   function montar() {
     raiz.innerHTML = `
-      <div class="marcas-barra"><p class="saudacao">Da ideia ao post, sem perder nada.</p><button class="btn-primario" data-cnovo>+ Nova ideia</button></div>
+      <div class="marcas-barra"><p class="saudacao">Da ideia à entrega, sem perder nada.</p><button class="btn-primario" data-cnovo>+ Novo cartão</button></div>
       <div class="numeros quatro" id="c-numeros"></div>
-      <div class="marcas-ferramentas"><div class="visoes"><button class="vis-btn ativo" data-cvis="planner">Planner</button><button class="vis-btn" data-cvis="roteiros">Roteiros</button></div><button class="btn-secundario ver-agenda" data-ver-agenda="post">📅 Ver na Agenda</button></div>
+      <div class="marcas-ferramentas"><div class="visoes"><button class="vis-btn ativo" data-cvis="planner">Quadro</button><button class="vis-btn" data-cvis="roteiros">Roteiros</button></div><button class="btn-secundario ver-agenda" data-ver-agenda="post">📅 Ver na Agenda</button></div>
       <div id="c-visao"><p class="carregando">Carregando seus conteúdos...</p></div>`;
     raiz.addEventListener('click', (e) => {
+      const rc = e.target.closest('[data-qdrecolher]'); if (rc) return alternarColuna(rc.dataset.qdrecolher);
+      if (e.target.closest('[data-qdlimpar]')) { filtro.busca = ''; filtro.marca = ''; filtro.etiqueta = ''; return desenharPlanner(); }
+      const ab = e.target.closest('[data-qdabrir]');
+      if (ab) {
+        const box = ab.closest('[data-qdadd]'), etapa = box.dataset.qdadd;
+        box.innerHTML = `<textarea rows="2" maxlength="140" placeholder="Título do cartão..."></textarea><div class="qd-add-acoes"><button type="button" class="btn-primario" data-qdcriar>Adicionar cartão</button><button type="button" class="qd-x" data-qdfechar aria-label="Cancelar">×</button></div>`;
+        const ta = box.querySelector('textarea'); ta.focus();
+        const criar = async () => {
+          const t = ta.value.trim(); if (!t) return ta.focus();
+          try { await criarRapido(etapa, t); desenharPlanner(); const nb = raiz.querySelector(`[data-qdadd="${etapa}"] [data-qdabrir]`); if (nb) nb.click(); }
+          catch (err) { console.error(err); toast(faltaSQL(err) ? 'Falta ativar o quadro novo: rode o conteudo-quadro.sql no Supabase.' : 'Não consegui criar agora.', true); }
+        };
+        ta.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); criar(); } if (ev.key === 'Escape') desenharPlanner(); });
+        box.querySelector('[data-qdcriar]').addEventListener('click', criar);
+        box.querySelector('[data-qdfechar]').addEventListener('click', () => desenharPlanner());
+        return;
+      }
       const a = e.target.closest('[data-cnovo], [data-cvis], [data-cavancar], [data-cabrir], [data-ccopiar], [data-cmes], [data-cdia], .card-marca[data-cid]');
       if (!a) return;
       if (a.matches('[data-cnovo]')) return abrirFicha(null);
