@@ -186,3 +186,5 @@
 .qd-fantasma { position: fixed; z-index: 9999; pointer-events: none; transform: rotate(3deg) scale(1.03); box-shadow: 0 18px 40px rgba(46,11,34,.3) !important; opacity: .95; margin: 0; }
 body.qd-arrastando-toque { overflow: hidden; }
 body.qd-arrastando-toque .qd-quadro { scroll-snap-type: none; }
+
+.qd-dica { background: var(--lima-claro, #f1ffd0); color: var(--lima-texto, #2f4a00); border-radius: 16px; padding: 12px 16px; margin-bottom: 12px; font-size: .92rem; line-height: 1.5; }

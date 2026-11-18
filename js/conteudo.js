@@ -165,15 +165,9 @@
     && (!filtro.etiqueta || etqs(c).includes(filtro.etiqueta));
 
   function desenharPlanner() {
-    if (!itens.length) {
-      $('#c-visao').innerHTML = `<div class="cartao vazio-grande"><h2>Seu banco de ideias começa aqui ✦</h2>
-        <p>Anote ideias de conteúdo, escreva roteiros (seus e das marcas) e acompanhe cada um até ir ao ar.</p>
-        <button class="btn-primario" data-cnovo>+ Primeira ideia</button></div>`;
-      return;
-    }
     const ms = marcas().filter(m => itens.some(c => c.marca_id === m.id));
     const ativo = filtro.busca || filtro.marca || filtro.etiqueta;
-    $('#c-visao').innerHTML = `<div class="qd-filtros">
+    $('#c-visao').innerHTML = `${!itens.length ? `<div class="qd-dica">✦ <b>Seu quadro de produção.</b> Cada cartão é um conteúdo: toque em <b>+ Adicionar cartão</b> em qualquer coluna e vá arrastando conforme ele avança, da ideia até a entrega.</div>` : ''}<div class="qd-filtros">
         <input type="search" data-qdbusca placeholder="🔎 Buscar cartão" value="${esc(filtro.busca)}">
         <select data-qdmarca><option value="">Todos os conteúdos</option><option value="meu" ${filtro.marca === 'meu' ? 'selected' : ''}>🌸 Só os meus</option>${ms.map(m => `<option value="${m.id}" ${filtro.marca === m.id ? 'selected' : ''}>💼 ${esc(m.nome)}</option>`).join('')}</select>
         <select data-qdetq><option value="">Todas as etiquetas</option>${Object.entries(ETIQUETAS).map(([k, v]) => `<option value="${k}" ${filtro.etiqueta === k ? 'selected' : ''}>${v.nome}</option>`).join('')}</select>
