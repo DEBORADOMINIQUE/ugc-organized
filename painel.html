@@ -31,7 +31,7 @@
   <script src="js/prospeccao.js?v=13"></script>
   <script src="js/financeiro.js?v=8r"></script>
   <script src="js/simulador.js?v=9"></script>
-  <script src="js/conteudo.js?v=15"></script>
+  <script src="js/conteudo.js?v=17"></script>
   <script src="js/assistente.js?v=8"></script>
   <script src="js/crescimento.js?v=4"></script>
   <script src="js/primeiros.js?v=3"></script>
@@ -43,7 +43,7 @@
   <script src="js/sugestoes.js?v=3"></script>
   <script src="js/agenda.js?v=8"></script>
   <script src="js/tema.js?v=4"></script>
-  <link rel="stylesheet" href="css/conteudo.css?v=16">
+  <link rel="stylesheet" href="css/conteudo.css?v=18">
   <link rel="stylesheet" href="css/financeiro.css?v=7">
   <link rel="stylesheet" href="css/prospeccao.css?v=3">
   <link rel="stylesheet" href="css/tarefas.css?v=8">
@@ -116,6 +116,13 @@
     .conteudo { margin-left: var(--sidebar); padding: 28px 40px 60px; max-width: calc(1180px + var(--sidebar)); }
     .topo { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
     .topo-esq { display: flex; align-items: center; gap: 12px; }
+    .btn-atualizar { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--borda); background: var(--branco); color: var(--ameixa, #2e0b22); cursor: pointer; flex-shrink: 0; }
+    .btn-atualizar:hover { border-color: var(--vinho); color: var(--vinho); }
+    .btn-atualizar svg { width: 19px; height: 19px; }
+    .btn-atualizar.girando svg, .puxar.girando svg { animation: girar .8s linear infinite; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+    .puxar { position: fixed; top: 0; left: 50%; z-index: 9500; width: 44px; height: 44px; margin-left: -22px; border-radius: 50%; background: var(--branco, #fff); color: var(--vinho, #ff1493); box-shadow: 0 6px 20px rgba(46,11,34,.2); display: flex; align-items: center; justify-content: center; transform: translateY(-60px); opacity: 0; pointer-events: none; }
+    .puxar svg { width: 22px; height: 22px; }
     .topo h1 { font-family: var(--titulo); font-weight: 600; font-size: 2rem; color: var(--vinho); line-height: 1.1; }
     .btn-menu {
       display: none; width: 42px; height: 42px; border-radius: var(--raio-p); border: 1px solid var(--borda);
@@ -334,7 +341,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Voltar</span>
         </button>
         <h1 id="titulo-topo">Menu Principal</h1>
+        <button class="btn-atualizar" id="btn-atualizar" aria-label="Atualizar a página" title="Atualizar a página">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
+        </button>
       </div>
+      <div class="puxar" id="puxar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg></div>
       <div class="periodos" id="periodos" role="group" aria-label="Período">
         <button class="periodo ativo" data-dias="0">Tudo</button>
         <button class="periodo" data-dias="7">7d</button>
@@ -764,6 +775,38 @@
       });
     });
 
+    // Atualizar: recarrega a página inteira, voltando para a mesma aba (pega dados e versão novos)
+    function recarregarPagina() {
+        if (document.querySelector('dialog[open]') && !confirm('Tem uma ficha aberta. Atualizar mesmo assim? O que não foi salvo se perde.')) return;
+        const ativa = document.querySelector('.aba.ativa');
+        $('btn-atualizar').classList.add('girando');
+        if (ativa) history.replaceState(null, '', location.pathname + '#' + ativa.dataset.tab.replace('aba-', ''));
+        location.reload();
+    }
+    $('btn-atualizar').addEventListener('click', recarregarPagina);
+    // Puxar a tela para baixo no topo (celular), como nos apps
+    (() => {
+        const ind = $('puxar'); let y0 = null, dist = 0;
+        const LIMITE = 80;
+        window.addEventListener('touchstart', (e) => {
+            if (window.scrollY > 0 || document.querySelector('dialog[open]') || document.body.classList.contains('menu-aberto') || document.body.classList.contains('qd-arrastando-toque') || e.touches.length > 1) { y0 = null; return; }
+            y0 = e.touches[0].clientY; dist = 0;
+        }, { passive: true });
+        window.addEventListener('touchmove', (e) => {
+            if (y0 === null) return;
+            dist = e.touches[0].clientY - y0;
+            if (dist <= 0 || window.scrollY > 0) { ind.style.opacity = 0; ind.style.transform = 'translateY(-60px)'; return; }
+            const d = Math.min(dist, 120);
+            ind.style.opacity = Math.min(1, d / LIMITE);
+            ind.style.transform = `translateY(${d * 0.6}px) rotate(${d * 3}deg)`;
+        }, { passive: true });
+        window.addEventListener('touchend', () => {
+            if (y0 === null) return;
+            if (dist > LIMITE && window.scrollY <= 0) { ind.classList.add('girando'); ind.style.transform = 'translateY(40px)'; recarregarPagina(); }
+            else { ind.style.opacity = 0; ind.style.transform = 'translateY(-60px)'; }
+            y0 = null; dist = 0;
+        });
+    })();
     $('btn-menu').addEventListener('click', () => document.body.classList.toggle('menu-aberto'));
     $('veu').addEventListener('click', () => document.body.classList.remove('menu-aberto'));
     $('btn-sair').addEventListener('click', () => Auth.logout());

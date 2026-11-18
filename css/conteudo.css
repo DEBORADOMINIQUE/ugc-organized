@@ -240,3 +240,24 @@ body.qd-arrastando-toque .qd-quadro { scroll-snap-type: none; }
 
 .as-print #as-previa { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .as-qtd { font-weight: 800; color: var(--vinho); font-size: .8rem; }
+
+/* Ficha do cartão: para quem + blocos de informação */
+.qd-paraquem { clear: both; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.qd-paraquem input { position: absolute; opacity: 0; pointer-events: none; }
+.qd-paraquem span { display: block; text-align: center; padding: 12px; border-radius: 14px; border: 2px solid var(--borda); font-weight: 800; cursor: pointer; background: var(--branco); }
+.qd-paraquem input:checked + span { border-color: var(--vinho, #ff1493); background: #fff0f8; color: var(--vinho, #ff1493); }
+.qd-paraquem input:focus-visible + span { outline: 2px solid var(--vinho); outline-offset: 2px; }
+.qd-so-marca { margin-bottom: 4px; }
+.qd-blocos { display: flex; flex-direction: column; gap: 10px; }
+.qd-bloco { border: 1px solid var(--borda); border-radius: 14px; padding: 10px; background: var(--branco); }
+.qd-bloco-topo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.qd-bloco-topo select, .qd-bloco-topo input { border: 1px solid var(--borda); border-radius: 10px; padding: 6px 8px; font: inherit; font-size: .88rem; background: var(--branco); color: inherit; }
+.qd-bloco-topo input { flex: 1; min-width: 120px; }
+.qd-bloco-txt { width: 100%; box-sizing: border-box; border: 1px solid var(--borda); border-radius: 10px; padding: 10px; font: inherit; background: #fffafd; color: inherit; resize: vertical; }
+.qd-add-bloco { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.qd-marca.pessoal { color: var(--suave); }
+.ficha [hidden] { display: none !important; }
+/* Cartão só com o título */
+.qd-card.qd-so-titulo { padding: 12px 40px 12px 14px; cursor: pointer; }
+.qd-card.qd-so-titulo .qd-titulo { font-size: .95rem; }
+.qd-card.qd-atrasado { border-left: 4px solid #ff4d6d; }

@@ -75,7 +75,7 @@
     });
   }
   async function enviarAnexos(arquivos, aoProgresso) {
-    if (!uid) { const { data } = await sb.auth.getUser(); uid = data && data.user && data.user.id; }
+    if (!uid) { const { data } = await sb.auth.getSession(); uid = data && data.session && data.session.user.id; }
     const lista = [...arquivos].filter(a => /^image\//.test(a.type) || a.type === 'application/pdf');
     const feitos = [];
     for (let i = 0; i < lista.length; i++) {
@@ -112,7 +112,7 @@
   const alternarColuna = (id) => { recolhidas = recolhidas.includes(id) ? recolhidas.filter(x => x !== id) : recolhidas.concat(id); try { localStorage.setItem('oug_qd_recolhidas', JSON.stringify(recolhidas)); } catch (e) {} desenharPlanner(); };
   // O que a marca ainda vai mandar (lista do acordo nas Marcas)
   const aReceber = (marcaId) => { const m = marcaId && marcas().find(x => x.id === marcaId); return m && Array.isArray(m.acordo) ? m.acordo.filter(x => x.envio && !x.recebido) : []; };
-  const faltaSQL = (e) => /checklist|etiquetas|posicao|link_arquivo|etapa_check|aprovacao|ajustes|briefing|gravado|envio|aprovado|'cor'|column "cor"|link_briefing|link_post|'briefing'|anexos|23514|PGRST204/i.test((e && (e.message + ' ' + e.code)) || '');
+  const faltaSQL = (e) => /checklist|etiquetas|posicao|link_arquivo|etapa_check|aprovacao|ajustes|briefing|gravado|envio|aprovado|'cor'|column "cor"|link_briefing|link_post|'briefing'|anexos|marca_nome|blocos|23514|PGRST204/i.test((e && (e.message + ' ' + e.code)) || '');
   mesCal.setDate(1);
 
   const $ = (s, el) => (el || raiz).querySelector(s);
@@ -125,6 +125,11 @@
   const fmtCurta = (iso) => iso ? deISO(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
   const marcas = () => (window.Marcas ? Marcas.lista() : []);
   const nomeMarca = (id) => (marcas().find(m => m.id === id) || {}).nome;
+  const marcaDo = (c) => (c.marca_id && nomeMarca(c.marca_id)) || c.marca_nome || '';
+  const ehMarca = (c) => !!(c.marca_id || c.marca_nome);
+  // Blocos de informação livres do cartão (briefing, roteiro, link, legenda, nota...)
+  const TIPOS_BLOCO = { briefing: '📋 Briefing', roteiro: '✍️ Roteiro', texto: '📝 Texto / legenda', link: '🔗 Link', nota: '💡 Anotação' };
+  const blocosDe = (c) => (Array.isArray(c.blocos) ? c.blocos : []);
   const temRoteiro = (c) => !!(c.gancho || c.desenvolvimento || c.cta);
   const digitos = (t) => { let d = String(t || '').replace(/\D/g, ''); if (d.length === 10 || d.length === 11) d = '55' + d; return d; };
 
@@ -136,7 +141,7 @@
   }
 
   function textoRoteiro(c) {
-    const partes = [`ROTEIRO: ${c.titulo}${c.marca_id ? ' · ' + (nomeMarca(c.marca_id) || '') : ''}`];
+    const partes = [`ROTEIRO: ${c.titulo}${marcaDo(c) ? ' · ' + marcaDo(c) : ''}`];
     if (c.formato) partes.push(`Formato: ${FORMATOS[c.formato] || c.formato}`);
     if (c.gancho) partes.push(`\nGANCHO (primeiros segundos)\n${c.gancho}`);
     if (c.desenvolvimento) partes.push(`\nDESENVOLVIMENTO\n${c.desenvolvimento}`);
@@ -207,38 +212,25 @@
 
   function cartao(c) {
     const i = ETAPAS.findIndex(e => e.id === colunaDe(c)), prox = ETAPAS[i + 1];
-    const marca = c.marca_id && nomeMarca(c.marca_id), h = hoje(), feito = c.etapa === 'postado';
+    const marca = marcaDo(c), h = hoje(), feito = c.etapa === 'postado';
     const d = c.data_publicacao, classeData = !d ? '' : feito ? 'ok' : d < h ? 'atraso' : d <= somaDias(h, 2) ? 'alerta' : '';
     const lista = chk(c), ok = lista.filter(x => x.ok).length;
     const capa = anx(c).find(a => /^image\//.test(a.tipo));
-    return `<article class="card-marca qd-card ${CORES[c.cor] ? 'postit' : ''}" ${CORES[c.cor] ? `style="--postit:${CORES[c.cor]}"` : ''} draggable="true" data-cid="${c.id}" tabindex="0">
-      ${capa ? `<div class="qd-capa"><img data-capa="${esc(capa.path)}" alt="" loading="lazy"></div>` : ''}
-      ${etqs(c).length ? `<div class="qd-etqs">${etqs(c).filter(k => ETIQUETAS[k]).map(k => `<span style="background:${ETIQUETAS[k].cor}" title="${ETIQUETAS[k].nome}">${ETIQUETAS[k].nome}</span>`).join('')}</div>` : ''}
+    // No quadro aparece só o título; o cartão completo abre ao tocar
+    const atrasado = c.data_publicacao && c.data_publicacao < h && !feito;
+    return `<article class="card-marca qd-card qd-so-titulo ${CORES[c.cor] ? 'postit' : ''} ${atrasado ? 'qd-atrasado' : ''}" ${CORES[c.cor] ? `style="--postit:${CORES[c.cor]}"` : ''} draggable="true" data-cid="${c.id}" tabindex="0" title="Toque para abrir o cartão completo${atrasado ? ' · prazo passou' : ''}">
       <div class="qd-titulo">${esc(c.titulo)}</div>
-      ${(() => { const sc = SECAO_DA_COLUNA[colunaDe(c)]; const tx = sc === 'briefing' ? c.briefing : sc === 'roteiro' ? (c.gancho || c.desenvolvimento) : sc === 'gravacao' ? c.notas : sc === 'post' ? c.legenda : ''; return tx ? `<div class="qd-previa">${esc(String(tx).slice(0, 120))}</div>` : ''; })()}
-      <div class="qd-badges">
-        ${d ? `<span class="qd-badge ${classeData}" title="${feito ? 'Concluído' : 'Prazo'}">🕒 ${d === h ? 'hoje' : fmtCurta(d)}</span>` : ''}
-        ${lista.length ? `<span class="qd-badge ${ok === lista.length ? 'ok' : ''}" title="Checklist">☑ ${ok}/${lista.length}</span>` : ''}
-        ${c.roteiro_status ? `<span class="qd-badge ${c.roteiro_status === 'aprovado' ? 'ok' : c.roteiro_status === 'ajustes' ? 'atraso' : ''}" title="Roteiro: ${STATUS_ROTEIRO[c.roteiro_status].nome}">✍️ ${STATUS_ROTEIRO[c.roteiro_status].nome}</span>` : temRoteiro(c) ? '<span class="qd-badge" title="Tem roteiro">✍️</span>' : ''}
-        ${c.link_arquivo ? '<span class="qd-badge" title="Arquivo final anexado">📎</span>' : ''}
-        ${anx(c).length ? `<span class="qd-badge" title="Anexos">🖼 ${anx(c).length}</span>` : ''}
-        ${c.briefing || c.link_briefing ? '<span class="qd-badge" title="Tem briefing">📋</span>' : ''}
-        ${c.link_post ? '<span class="qd-badge ok" title="Post publicado">🔗</span>' : ''}
-        ${aReceber(c.marca_id).length && c.etapa !== 'postado' ? `<span class="qd-badge alerta" title="${esc(aReceber(c.marca_id).map(x => x.item).join(', '))}">📦 ${aReceber(c.marca_id).length} a receber</span>` : ''}
-        <span class="qd-badge fmt">${esc(FORMATOS[c.formato] || c.formato)}</span>
-      </div>
-      ${marca ? `<div class="qd-marca"><span class="qd-av">${esc(marca.trim().charAt(0).toUpperCase())}</span>${esc(marca)}</div>` : ''}
-      ${prox ? `<button class="avancar" data-cavancar="${c.id}" data-para="${prox.id}" title="Mover para ${prox.nome}">→</button>` : ''}
+      ${prox ? `<button class="avancar" data-cavancar="${c.id}" data-para="${prox.id}" title="Mover para ${esc(prox.nome)}">→</button>` : ''}
     </article>`;
   }
-  const visivel = (c) => (!filtro.busca || (c.titulo + ' ' + (c.notas || '') + ' ' + (nomeMarca(c.marca_id) || '')).toLowerCase().includes(filtro.busca.toLowerCase()))
-    && (!filtro.marca || (filtro.marca === 'meu' ? !c.marca_id : c.marca_id === filtro.marca))
+  const visivel = (c) => (!filtro.busca || (c.titulo + ' ' + (c.notas || '') + ' ' + marcaDo(c) + ' ' + (c.briefing || '') + ' ' + blocosDe(c).map(b => b.texto).join(' ')).toLowerCase().includes(filtro.busca.toLowerCase()))
+    && (!filtro.marca || (filtro.marca === 'meu' ? !ehMarca(c) : c.marca_id === filtro.marca))
     && (!filtro.etiqueta || etqs(c).includes(filtro.etiqueta));
 
   function desenharPlanner() {
     const ms = marcas().filter(m => itens.some(c => c.marca_id === m.id));
     const ativo = filtro.busca || filtro.marca || filtro.etiqueta;
-    $('#c-visao').innerHTML = `${!itens.length ? `<div class="qd-dica">✦ <b>Seu quadro de produção.</b> Cada cartão é um conteúdo: toque em <b>+ Adicionar cartão</b> em qualquer coluna e vá arrastando conforme ele avança, da ideia até a entrega.</div>` : ''}<div class="qd-filtros">
+    $('#c-visao').innerHTML = `${!itens.length ? `<div class="qd-dica">✦ <b>Seu quadro de produção.</b> Cada cartão é um conteúdo: toque em <b>+ Adicionar cartão</b> em qualquer coluna, preencha a ficha e vá arrastando conforme ele avança. No quadro aparece só o título: <b>toque no cartão</b> para ver tudo.</div>` : ''}<div class="qd-filtros">
         <input type="search" data-qdbusca placeholder="🔎 Buscar cartão" value="${esc(filtro.busca)}">
         <select data-qdmarca><option value="">Todos os conteúdos</option><option value="meu" ${filtro.marca === 'meu' ? 'selected' : ''}>🌸 Só os meus</option>${ms.map(m => `<option value="${m.id}" ${filtro.marca === m.id ? 'selected' : ''}>💼 ${esc(m.nome)}</option>`).join('')}</select>
         <select data-qdetq><option value="">Todas as etiquetas</option>${Object.entries(ETIQUETAS).map(([k, v]) => `<option value="${k}" ${filtro.etiqueta === k ? 'selected' : ''}>${v.nome}</option>`).join('')}</select>
@@ -428,7 +420,7 @@
     $('#c-visao').innerHTML = lista.length ? `<div class="textos">${lista.map(c => `
       <div class="cartao texto-card roteiro-card">
         <div class="fb-topo"><strong>${esc(c.titulo)}</strong>${c.roteiro_status ? `<span class="p-status ${STATUS_ROTEIRO[c.roteiro_status].cor}">${STATUS_ROTEIRO[c.roteiro_status].nome}</span>` : ''}</div>
-        <div class="t-meta"><span class="chip">${esc(FORMATOS[c.formato] || c.formato)}</span>${c.marca_id ? `<span class="chip marca">💼 ${esc(nomeMarca(c.marca_id) || 'marca')}</span>` : '<span class="chip">🌸 Meu conteúdo</span>'}</div>
+        <div class="t-meta"><span class="chip">${esc(FORMATOS[c.formato] || c.formato)}</span>${ehMarca(c) ? `<span class="chip marca">💼 ${esc(marcaDo(c) || 'marca')}</span>` : '<span class="chip">🌸 Perfil pessoal</span>'}</div>
         ${c.gancho ? `<p class="gancho">“${esc(c.gancho)}”</p>` : ''}
         ${c.desenvolvimento ? `<p class="texto-previa">${esc(c.desenvolvimento)}</p>` : ''}
         <div class="atalhos"><button class="mini-btn" data-ccopiar="${c.id}">Copiar roteiro</button><button class="mini-btn" data-cabrir="${c.id}">Abrir</button></div>
@@ -445,22 +437,34 @@
     const m = c.marca_id && marcas().find(x => x.id === c.marca_id);
     const dlg = document.getElementById('ficha-marca');
     dlg.innerHTML = `<form class="ficha" novalidate>
-      <header class="ficha-cab"><div><small>${nova ? 'Novo conteúdo' : esc(nomeEtapa(colunaDe(c)))}</small><h2>${nova ? 'Qual é a ideia?' : esc(c.titulo)}</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+      <header class="ficha-cab"><div><small>${nova ? 'Novo cartão · ' + esc(nomeEtapa(colunaDe(c))) : esc(nomeEtapa(colunaDe(c)))}</small><h2>${nova ? 'Novo conteúdo ✦' : esc(c.titulo)}</h2></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
       <div class="ficha-corpo">
         <div class="faixa-erro" id="c-erro" hidden></div>
         <fieldset data-sec="conteudo"><legend>Conteúdo</legend>
-          <label class="campo largo"><span>Título / ideia *</span><input name="titulo" maxlength="140" value="${esc(c.titulo || '')}" placeholder="Ex.: 3 erros que eu cometia no skincare"></label>
-          <div class="cat-escolha">${Object.entries(FORMATOS).map(([k, v]) => `<label><input type="radio" name="formato" value="${k}" ${c.formato === k ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div>
-          <div class="grade-campos">
-            <label class="campo"><span>Para quem?</span><select name="marca_id"><option value="">🌸 Meu conteúdo</option>${ativas.map(x => `<option value="${x.id}" ${c.marca_id === x.id ? 'selected' : ''}>💼 ${esc(x.nome)}</option>`).join('')}</select></label>
-            <label class="campo"><span>Onde vai sair</span><select name="plataforma">${Object.entries(PLATAFORMAS).map(([k, v]) => `<option value="${k}" ${c.plataforma === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-            <label class="campo"><span>Etapa</span><select name="etapa">${ETAPAS.map(e => `<option value="${e.id}" ${colunaDe(c) === e.id ? 'selected' : ''}>${esc(e.emoji || '')} ${esc(e.nome)}</option>`).join('')}</select></label>
-            <label class="campo"><span>Prazo (entrega ou post)</span><input type="date" name="data_publicacao" value="${c.data_publicacao || ''}"></label>
+          <label class="campo largo"><span>Título *</span><input name="titulo" maxlength="140" value="${esc(c.titulo || '')}" placeholder="Ex.: Unboxing do kit de verão"></label>
+          <div class="qd-paraquem" role="radiogroup" aria-label="Para quem é este conteúdo">
+            <label><input type="radio" name="pq" value="pessoal" ${!ehMarca(c) ? 'checked' : ''}><span>🌸 Perfil pessoal</span></label>
+            <label><input type="radio" name="pq" value="marca" ${ehMarca(c) ? 'checked' : ''}><span>💼 Para uma marca</span></label>
           </div>
+          <div class="grade-campos qd-so-marca" ${ehMarca(c) ? '' : 'hidden'}>
+            <label class="campo"><span>Qual marca?</span><select name="marca_id"><option value="">Escolha a marca</option>${ativas.map(x => `<option value="${x.id}" ${c.marca_id === x.id ? 'selected' : ''}>💼 ${esc(x.nome)}</option>`).join('')}<option value="__outra" ${!c.marca_id && c.marca_nome ? 'selected' : ''}>+ Outra marca (digitar o nome)</option></select></label>
+            <label class="campo" id="qd-marca-outra" ${!c.marca_id && c.marca_nome ? '' : 'hidden'}><span>Nome da marca</span><input name="marca_nome" maxlength="80" value="${esc(c.marca_nome || '')}" placeholder="Ex.: Sallve"></label>
+          </div>
+          <div class="grade-campos">
+            <label class="campo"><span>📅 Dia da entrega / post</span><input type="date" name="data_publicacao" value="${c.data_publicacao || ''}"></label>
+            <label class="campo"><span>Etapa</span><select name="etapa">${ETAPAS.map(e => `<option value="${e.id}" ${colunaDe(c) === e.id ? 'selected' : ''}>${esc(e.emoji || '')} ${esc(e.nome)}</option>`).join('')}</select></label>
+            <label class="campo"><span>Onde vai sair</span><select name="plataforma">${Object.entries(PLATAFORMAS).map(([k, v]) => `<option value="${k}" ${c.plataforma === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          </div>
+          <div class="cat-escolha">${Object.entries(FORMATOS).map(([k, v]) => `<label><input type="radio" name="formato" value="${k}" ${c.formato === k ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div>
         </fieldset>
-        <fieldset data-sec="briefing"><legend>📋 Briefing</legend>
-          <label class="campo largo"><span>O que a marca pediu</span><textarea name="briefing" rows="5" placeholder="Cole aqui o briefing: objetivo, público, falas obrigatórias, o que não pode, formato, prazos...">${esc(c.briefing || '')}</textarea></label>
+        <fieldset data-sec="briefing"><legend id="qd-leg-brief">${ehMarca(c) ? '📋 Especificações da marca' : '📋 Ideia e referências'}</legend>
+          <label class="campo largo"><span id="qd-lab-brief">${ehMarca(c) ? 'Tudo o que a marca pediu: briefing, falas obrigatórias, o que não pode, formato, quantidade, uso de imagem...' : 'Sobre o que é, para quem, o que quer mostrar...'}</span><textarea name="briefing" rows="5" placeholder="Escreva ou cole aqui">${esc(c.briefing || '')}</textarea></label>
           <label class="campo largo"><span>Link do briefing (PDF, Drive, Notion...)</span><input name="link_briefing" type="url" value="${esc(c.link_briefing || '')}" placeholder="https://"></label>
+        </fieldset>
+        <fieldset data-sec="info"><legend>🗂 Informações do conteúdo</legend>
+          <p class="desc" style="clear:both;margin:0 0 8px">Adicione o que precisar para ficar por dentro: roteiros, textos, links, anotações. Pode adicionar quantos quiser.</p>
+          <div id="qd-blocos" class="qd-blocos"></div>
+          <div class="qd-add-bloco">${Object.entries(TIPOS_BLOCO).map(([k, v]) => `<button type="button" class="mini-btn" data-bloco-add="${k}">+ ${v}</button>`).join('')}</div>
         </fieldset>
         <fieldset data-sec="anexos"><legend>📎 Imagens e anexos</legend>
           <label class="qd-drop" id="qd-drop"><input type="file" id="qd-arquivos" accept="image/*,application/pdf" multiple hidden>
@@ -581,12 +585,53 @@
     const addItem = () => { const t = novoItem.value.trim(); if (!t) return; lista.push({ t, ok: false }); novoItem.value = ''; desenharChk(); guardarChk(); novoItem.focus(); };
     dlg.querySelector('[data-chk-add]').addEventListener('click', addItem);
     novoItem.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
-    dlg.querySelector('[data-chk-padrao]').addEventListener('click', () => { lista = checklistPadrao(!!f.marca_id.value); desenharChk(); guardarChk(); });
+    dlg.querySelector('[data-chk-padrao]').addEventListener('click', () => { lista = checklistPadrao((f.querySelector('input[name="pq"]:checked') || {}).value === 'marca'); desenharChk(); guardarChk(); });
     // Escolheu uma marca? Já sugere "vídeo UGC" e "para a marca"
-    f.marca_id.addEventListener('change', () => {
-      if (f.marca_id.value && nova) { f.plataforma.value = 'marca'; const r = f.querySelector('input[value="video_ugc"]'); if (r) r.checked = true; }
-      if (nova && !lista.some(x => x.ok)) { lista = checklistPadrao(!!f.marca_id.value); desenharChk(); }
+    const paraMarca = () => (f.querySelector('input[name="pq"]:checked') || {}).value === 'marca';
+    const ajustarPQ = () => {
+      const mk = paraMarca();
+      dlg.querySelector('.qd-so-marca').hidden = !mk;
+      dlg.querySelector('#qd-marca-outra').hidden = !(mk && f.marca_id.value === '__outra');
+      dlg.querySelector('#qd-leg-brief').textContent = mk ? '📋 Especificações da marca' : '📋 Ideia e referências';
+      dlg.querySelector('#qd-lab-brief').textContent = mk ? 'Tudo o que a marca pediu: briefing, falas obrigatórias, o que não pode, formato, quantidade, uso de imagem...' : 'Sobre o que é, para quem, o que quer mostrar...';
+      if (nova) {
+        f.plataforma.value = mk ? 'marca' : 'instagram';
+        const r = f.querySelector(`input[name="formato"][value="${mk ? 'video_ugc' : 'reels'}"]`); if (r) r.checked = true;
+        if (!lista.some(x => x.ok)) { lista = checklistPadrao(mk); desenharChk(); }
+      }
+    };
+    f.querySelectorAll('input[name="pq"]').forEach(r => r.addEventListener('change', () => { ajustarPQ(); if (paraMarca()) setTimeout(() => f.marca_id.focus(), 30); }));
+    f.marca_id.addEventListener('change', () => { ajustarPQ(); if (f.marca_id.value === '__outra') setTimeout(() => f.marca_nome.focus(), 30); });
+
+    // ===== Blocos de informação (quantos quiser) =====
+    let blocos = blocosDe(c).map(b => ({ ...b }));
+    const caixaBl = dlg.querySelector('#qd-blocos');
+    const desenharBlocos = () => {
+      caixaBl.innerHTML = blocos.map((b, i) => `<div class="qd-bloco" data-i="${i}">
+        <div class="qd-bloco-topo"><select data-bl-tipo="${i}" aria-label="Tipo">${Object.entries(TIPOS_BLOCO).map(([k, v]) => `<option value="${k}" ${b.tipo === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+          <input data-bl-tit="${i}" value="${esc(b.titulo || '')}" maxlength="80" placeholder="Título (opcional)">
+          ${b.tipo === 'link' && /^https?:\/\//i.test(b.texto || '') ? `<a class="mini-btn" href="${esc(b.texto)}" target="_blank" rel="noopener">Abrir</a>` : ''}
+          <button type="button" class="mini-btn" data-bl-copiar="${i}" title="Copiar">Copiar</button>
+          <button type="button" class="qd-x" data-bl-del="${i}" aria-label="Remover">×</button></div>
+        ${b.tipo === 'link' ? `<input class="qd-bloco-txt" data-bl-txt="${i}" type="url" value="${esc(b.texto || '')}" placeholder="https://">` : `<textarea class="qd-bloco-txt" data-bl-txt="${i}" rows="${b.tipo === 'roteiro' ? 6 : 3}" placeholder="${b.tipo === 'roteiro' ? 'Gancho, cenas, falas, chamada...' : 'Escreva ou cole aqui'}">${esc(b.texto || '')}</textarea>`}
+      </div>`).join('');
+    };
+    desenharBlocos();
+    caixaBl.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t.dataset.blTxt !== undefined) blocos[t.dataset.blTxt].texto = t.value;
+      if (t.dataset.blTit !== undefined) blocos[t.dataset.blTit].titulo = t.value;
     });
+    caixaBl.addEventListener('change', (e) => { const t = e.target; if (t.dataset.blTipo !== undefined) { blocos[t.dataset.blTipo].tipo = t.value; desenharBlocos(); } });
+    caixaBl.addEventListener('click', (e) => {
+      const del = e.target.closest('[data-bl-del]'), cp = e.target.closest('[data-bl-copiar]');
+      if (del) { const b = blocos[+del.dataset.blDel]; if ((b.texto || '').trim() && !confirm('Remover este bloco?')) return; blocos.splice(+del.dataset.blDel, 1); desenharBlocos(); }
+      if (cp) { const b = blocos[+cp.dataset.blCopiar]; navigator.clipboard.writeText(b.texto || '').then(() => toast('Copiado ✦')); }
+    });
+    dlg.querySelectorAll('[data-bloco-add]').forEach(b => b.addEventListener('click', () => {
+      blocos.push({ tipo: b.dataset.blocoAdd, titulo: '', texto: '' }); desenharBlocos();
+      const ult = caixaBl.querySelector('.qd-bloco:last-child .qd-bloco-txt'); if (ult) ult.focus();
+    }));
     // Escreveu o roteiro? Marca como rascunho e sobe a etapa
     ['gancho', 'desenvolvimento', 'cta'].forEach(n => f[n].addEventListener('input', () => {
       if (!f.roteiro_status.value && f[n].value.trim()) f.roteiro_status.value = 'rascunho';
@@ -606,7 +651,12 @@
       const titulo = f.titulo.value.trim();
       if (!titulo) { const el = dlg.querySelector('#c-erro'); el.textContent = 'Dê um título para a ideia.'; el.hidden = false; return f.titulo.focus(); }
       const t = (n) => f[n].value.trim() || null;
-      const dados = { titulo, formato: f.formato.value || 'reels', marca_id: f.marca_id.value || null, plataforma: f.plataforma.value, etapa: f.etapa.value,
+      const mk = (f.querySelector('input[name="pq"]:checked') || {}).value === 'marca';
+      const outra = mk && f.marca_id.value === '__outra';
+      if (mk && !f.marca_id.value) { const el = dlg.querySelector('#c-erro'); el.textContent = 'Escolha a marca (ou "Outra marca" para digitar o nome).'; el.hidden = false; return f.marca_id.focus(); }
+      if (outra && !f.marca_nome.value.trim()) { const el = dlg.querySelector('#c-erro'); el.textContent = 'Escreva o nome da marca.'; el.hidden = false; return f.marca_nome.focus(); }
+      const dados = { titulo, formato: f.formato.value || 'reels', marca_id: mk && !outra ? (f.marca_id.value || null) : null, marca_nome: outra ? f.marca_nome.value.trim() : null,
+        blocos: blocos.filter(b => (b.texto || '').trim() || (b.titulo || '').trim()), plataforma: f.plataforma.value, etapa: f.etapa.value,
         data_publicacao: t('data_publicacao'), gancho: t('gancho'), desenvolvimento: t('desenvolvimento'), cta: t('cta'),
         roteiro_status: f.roteiro_status.value || null, referencia: t('referencia'), legenda: t('legenda'), notas: t('notas'),
         anexos, link_arquivo: t('link_arquivo'), briefing: t('briefing'), link_briefing: t('link_briefing'), link_post: t('link_post'), cor: (f.querySelector('input[name="cor"]:checked') || {}).value || null, etiquetas: [...f.querySelectorAll('input[name="etq"]:checked')].map(i => i.value), checklist: lista };
@@ -649,7 +699,10 @@
       if (e.target.closest('[data-qdlimpar]')) { filtro.busca = ''; filtro.marca = ''; filtro.etiqueta = ''; return desenharPlanner(); }
       const ab = e.target.closest('[data-qdabrir]');
       if (ab) {
-        const box = ab.closest('[data-qdadd]'), etapa = box.dataset.qdadd;
+        // Abre direto a ficha completa do cartão novo, já na coluna certa
+        const etapa = ab.closest('[data-qdadd]').dataset.qdadd;
+        if (etapa) return abrirFicha(null, { etapa });
+        const box = ab.closest('[data-qdadd]');
         box.innerHTML = `<textarea rows="2" maxlength="140" placeholder="Título do cartão..."></textarea><div class="qd-add-acoes"><button type="button" class="btn-primario" data-qdcriar>Adicionar cartão</button><button type="button" class="qd-x" data-qdfechar aria-label="Cancelar">×</button></div>`;
         const ta = box.querySelector('textarea'); ta.focus();
         const criar = async () => {
@@ -677,7 +730,7 @@
   window.Conteudo = {
     async iniciar(cliente, secao) {
       sb = cliente; raiz = secao; montar();
-      sb.auth.getUser().then(({ data }) => { uid = data && data.user && data.user.id; }).catch(() => {});
+      sb.auth.getSession().then(({ data }) => { uid = data && data.session && data.session.user.id; }).catch(() => {});
       try {
         let tudo = [], ini = 0;
         while (true) {
